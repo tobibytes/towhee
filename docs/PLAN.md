@@ -147,6 +147,17 @@ The core ships an in-memory implementation for tests. Each host ships a durable 
 
 **Cloudflare** (`@towhee/cloudflare`): a Worker routes `/v1/rooms/<room>` to a room Durable Object by name and `/v1/inbox` to the user's inbox Durable Object. Rooms use WebSocket hibernation and Durable Object SQLite storage. Keys are Worker secrets. Deploy with `wrangler deploy` from a template.
 
+### Client
+
+`createClient({ url, authEndpoint })` then `client.enter(roomId, { doc? })`:
+
+- `authEndpoint` is a URL the client POSTs `{ "room": "<id>" }` to, with cookies, expecting `{ "token": "..." }`, or a function returning a token. A 401 or 403 from the URL stops the client; other failures retry.
+- `status` is `connecting`, `connected`, `reconnecting` or `disconnected`; `synced` turns true when the server's copy has arrived. Both have events, as do `self`, `others`, `event` and `error`.
+- On a close, the error code decides: `token_expired` gets a new token and reconnects at once; retryable codes and network drops reconnect with backoff (500 ms doubling to 30 s, with jitter, reset after a successful connect); anything else stops.
+- Local edits are sent only while connected with `write` access. Edits made offline sync in the next handshake. A `read` or `comment` client that edits locally is refused (`forbidden`) at its next handshake, so apps should make editors read-only for them.
+- Presence: `setPresence`, `updatePresence`, `others()`. Others' presence is dropped while disconnected and resent by the server on reconnect.
+- `request(method, params)` calls room features (comments, history, inbox in later sessions).
+
 ## Security
 
 - Tokens are verified on every connection; access is checked on every message.
