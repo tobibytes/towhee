@@ -170,10 +170,23 @@ export async function createRoomToken(input: RoomTokenInput, key: RoomKey, optio
  * Checks a room token: format, algorithm, key, signature, claims, expiry, the key's room scope and
  * (with `options.room`) the room being joined. Throws a {@link TokenError} saying why it failed.
  */
-export async function verifyRoomToken(token: string, keys: RoomKey | readonly RoomKey[], options: VerifyOptions = {}): Promise<VerifiedRoomToken> {
-  const list = (Array.isArray(keys) ? keys : [keys]).map(checkKey);
-  if (list.length === 0) throw new TypeError("verifyRoomToken needs at least one key");
+/**
+ * Checks a deployment's keys: at least one, unique ids, valid secrets and room patterns. Servers
+ * call this at startup so a bad key fails loudly once instead of refusing every token.
+ */
+export function validateRoomKeys(keys: RoomKey | readonly RoomKey[]): void {
+  checkKeys(keys);
+}
+
+function checkKeys(keys: RoomKey | readonly RoomKey[]): Required<RoomKey>[] {
+  const list = (Array.isArray(keys) ? keys : [keys as RoomKey]).map(checkKey);
+  if (list.length === 0) throw new TypeError("At least one room key is needed");
   if (new Set(list.map((k) => k.id)).size !== list.length) throw new TypeError("Room key ids must be unique");
+  return list;
+}
+
+export async function verifyRoomToken(token: string, keys: RoomKey | readonly RoomKey[], options: VerifyOptions = {}): Promise<VerifiedRoomToken> {
+  const list = checkKeys(keys);
   const clockSkew = options.clockSkew ?? DEFAULT_CLOCK_SKEW;
   if (!Number.isFinite(clockSkew) || clockSkew < 0 || clockSkew > MAX_CLOCK_SKEW) {
     throw new TypeError(`clockSkew must be 0-${MAX_CLOCK_SKEW} seconds`);
