@@ -6,6 +6,12 @@ import { isRoomUser, type RoomUser } from "./user";
 export const PROTOCOL_VERSION = 1;
 
 export const MAX_TOKEN_LENGTH = 8192;
+
+/**
+ * Event a server sends when it lost presence (a Durable Object woke from hibernation). Clients
+ * answer by sending their current presence again. Event names starting with `towhee.` are reserved.
+ */
+export const PRESENCE_RESEND_EVENT = "towhee.presence.resend";
 export const MAX_ERROR_MESSAGE_LENGTH = 1024;
 export const MAX_CONNECTION_ID_LENGTH = 64;
 

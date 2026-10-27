@@ -240,6 +240,26 @@ describe("presence", () => {
     expect(b.others().map((o) => o.user.id)).toEqual(["ada"]);
   });
 
+  it("resends its presence when the server asks, without surfacing the event", async () => {
+    server = new TestServer();
+    const a = join("ada");
+    const b = join("bob");
+    const events: string[] = [];
+    a.on("event", (e) => events.push(e.name));
+    await settle();
+    a.setPresence({ cursor: 3 });
+    await settle();
+    const room = await server.room("doc:1");
+    // Simulate a room that lost its presence (a Durable Object waking up).
+    room.awareness.states.clear();
+    room.awareness.meta.clear();
+    room.requestPresence();
+    await settle();
+    expect(room.awareness.getStates().get(a.doc.clientID)).toEqual({ cursor: 3, user: { id: "ada" } });
+    expect(b.others().map((o) => o.user.id)).toEqual(["ada"]);
+    expect(events).toEqual([]);
+  });
+
   it("tells you who you are", async () => {
     server = new TestServer();
     const a = join("ada", { access: "comment", user: { name: "Ada" } });

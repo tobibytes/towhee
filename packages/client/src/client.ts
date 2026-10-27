@@ -6,6 +6,7 @@ import {
   encodeMessage,
   errorCodeFromClose,
   isValidRoomId,
+  PRESENCE_RESEND_EVENT,
   PROTOCOL_VERSION,
   type RoomUser,
   recoveryFor,
@@ -281,16 +282,35 @@ export class RoomConnection {
     socket.onopen = () => {
       if (this.socket === socket) this.send({ type: "auth", protocol: PROTOCOL_VERSION, token });
     };
-    socket.onmessage = (event) => {
+    const receive = (bytes: Uint8Array) => {
       if (this.socket !== socket) return;
-      const data = event.data;
-      if (!(data instanceof ArrayBuffer) && !(data instanceof Uint8Array)) return;
       try {
-        this.handle(decodeServerMessage(data instanceof Uint8Array ? data : new Uint8Array(data)));
+        this.handle(decodeServerMessage(bytes));
       } catch {
         // A server we can't understand: drop the connection and try again.
         socket.close(4000, "protocol_error");
       }
+    };
+    // Some WebSocket implementations ignore binaryType and deliver Blobs, which only convert
+    // asynchronously. Frames queue behind any Blob still converting, so their order is kept.
+    let converting: Promise<void> | null = null;
+    socket.onmessage = (event) => {
+      if (this.socket !== socket) return;
+      const data = event.data;
+      let bytes: Uint8Array | Promise<Uint8Array>;
+      if (data instanceof ArrayBuffer) bytes = new Uint8Array(data);
+      else if (data instanceof Uint8Array) bytes = data;
+      else if (typeof Blob !== "undefined" && data instanceof Blob) bytes = data.arrayBuffer().then((b) => new Uint8Array(b));
+      else return; // text frames aren't part of the protocol
+      if (converting === null && bytes instanceof Uint8Array) {
+        receive(bytes);
+        return;
+      }
+      const next: Promise<void> = (converting ?? Promise.resolve()).then(async () => {
+        receive(await bytes);
+        if (converting === next) converting = null;
+      });
+      converting = next;
     };
     socket.onclose = (event) => {
       if (this.socket === socket) this.onClose(event.code);
@@ -341,6 +361,13 @@ export class RoomConnection {
         return;
       }
       case "event":
+        if (message.name === PRESENCE_RESEND_EVENT) {
+          if (this.awareness.getLocalState() !== null) {
+            this.send({ type: "awareness", data: encodeAwarenessUpdate(this.awareness, [this.doc.clientID]) });
+          }
+          return;
+        }
+        if (message.name.startsWith("towhee.")) return; // reserved for the protocol
         this.emit("event", { name: message.name, data: message.data });
         return;
     }

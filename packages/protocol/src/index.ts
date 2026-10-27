@@ -24,6 +24,7 @@ export {
   MESSAGE_TYPES,
   type Message,
   type MessageType,
+  PRESENCE_RESEND_EVENT,
   PROTOCOL_VERSION,
   type ReadyMessage,
   type RequestMessage,

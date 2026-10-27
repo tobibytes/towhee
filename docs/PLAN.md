@@ -145,7 +145,9 @@ The core ships an in-memory implementation for tests. Each host ships a durable 
 
 **Node** (`@towhee/node`, Docker image `towhee`): one process, rooms in memory, SQLite (`node:sqlite`, WAL) on a volume. Configured by env: `TOWHEE_SECRET` or `TOWHEE_KEYS`, `TOWHEE_DATA`, port, limits (see its README); `TOWHEE_WEBHOOK_URL` comes with notifications. `GET /health`. Empty rooms are saved and freed after 30 seconds; a room isn't loaded again until its save finishes. WebSocket pings every 30 seconds drop dead clients. On SIGTERM every room is saved and clients get `server_restarting`, so they reconnect on their own. One instance only in v1. Running several instances needs a pub/sub layer (Redis or Postgres) and comes after v1.
 
-**Cloudflare** (`@towhee/cloudflare`): a Worker routes `/v1/rooms/<room>` to a room Durable Object by name and `/v1/inbox` to the user's inbox Durable Object. Rooms use WebSocket hibernation and Durable Object SQLite storage. Keys are Worker secrets. Deploy with `wrangler deploy` from a template.
+**Cloudflare** (`@towhee/cloudflare`): a Worker routes `/v1/rooms/<room>` to a room Durable Object by name and `/v1/inbox` (with notifications) to the user's inbox Durable Object. Rooms use WebSocket hibernation and Durable Object SQLite storage, with the compacted state in 1 MB chunks (rows are capped at 2 MB). Keys are Worker secrets. Deploy with `wrangler deploy` from `packages/cloudflare/template`.
+
+Hibernation needs the core to run without timers: in manual mode (`timers: "manual"`) the room sets none, and the host calls `sweep()` from the Durable Object alarm at `nextDeadline()`. The core reports each connection's state through `onConnectionChange`; the Durable Object stores it in SQLite (and its id in the socket attachment) and, on waking, rebuilds connections with `restore()` and calls `requestPresence()`. That sends the reserved `towhee.presence.resend` event, and clients answer with their current presence.
 
 ### Client
 

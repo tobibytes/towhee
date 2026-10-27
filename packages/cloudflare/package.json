@@ -1,0 +1,36 @@
+{
+  "name": "@towhee/cloudflare",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Run Towhee on Cloudflare: a Worker plus one Durable Object per room, with WebSocket hibernation and SQLite storage.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "template"],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@towhee/auth": "workspace:*",
+    "@towhee/core": "workspace:*",
+    "@towhee/protocol": "workspace:*",
+    "yjs": "^13.6.33"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261027.1",
+    "@towhee/client": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tobibytes/towhee.git",
+    "directory": "packages/cloudflare"
+  }
+}
