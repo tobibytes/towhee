@@ -22,12 +22,12 @@ A session is done when its "Done when" list is true, CI is green and the PR is m
 
 ## 2. Core room
 
-- [ ] `@towhee/core`: `Room` with Yjs sync and awareness over a `Connection` interface
-- [ ] Auth handshake (`auth` then `ready`, 10 second timeout), access checks per message
-- [ ] Presence identity set from the token; presence cleared on disconnect
-- [ ] `Storage` interface, in-memory implementation, update log and compaction
-- [ ] Limits: message size, document size, connections per room, message rate
-- [ ] Shared storage test suite that later hosts reuse
+- [x] `@towhee/core`: `Room` with Yjs sync and awareness over a `Connection` interface
+- [x] Auth handshake (`auth` then `ready`, 10 second timeout), access checks per message
+- [x] Presence identity set from the token; presence cleared on disconnect
+- [x] `Storage` interface, in-memory implementation, update log and compaction
+- [x] Limits: message size, document size, connections per room, message rate
+- [x] Shared storage test suite that later hosts reuse
 
 **Done when:** with an in-process transport, three clients editing at once converge; a late joiner catches up; a read-only client's edit is refused and it is disconnected; presence disappears when a client leaves; a room unloaded and loaded again has the same document; each limit closes the connection with its code.
 

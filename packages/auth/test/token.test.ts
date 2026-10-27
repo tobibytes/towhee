@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decodeBase64Url, encodeBase64Url } from "../src/base64url";
-import { createRoomToken, generateSecret, MAX_EXPIRES_IN, type RoomKey, TokenError, type TokenErrorCode, verifyRoomToken } from "../src";
+import { createRoomToken, generateSecret, MAX_EXPIRES_IN, type RoomKey, TokenError, type TokenErrorCode, validateRoomKeys, verifyRoomToken } from "../src";
 
 const NOW = Date.UTC(2027, 0, 1); // fixed clock for every test
 const key: RoomKey = { id: "main", secret: "s".repeat(32) };
@@ -186,6 +186,9 @@ describe("keys", () => {
     await expect(verifyRoomToken(t, [], { now: NOW })).rejects.toThrow(TypeError);
     await expect(verifyRoomToken(t, [key, { ...key }], { now: NOW })).rejects.toThrow(TypeError);
     await expect(verifyRoomToken(t, key, { now: NOW, clockSkew: 3600 })).rejects.toThrow(TypeError);
+    expect(() => validateRoomKeys([key, talvra])).not.toThrow();
+    expect(() => validateRoomKeys([])).toThrow(TypeError);
+    expect(() => validateRoomKeys({ id: "x", secret: "short" })).toThrow(TypeError);
   });
 
   it("checks token input", async () => {

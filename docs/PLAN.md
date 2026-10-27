@@ -94,9 +94,10 @@ Using the standard sync and awareness messages unchanged keeps Towhee compatible
 A room is one `Y.Doc` plus its connections. In `@towhee/core`:
 
 - **Sync:** the standard Yjs handshake (state vectors, then missing updates), then live updates broadcast to everyone else in the room.
-- **Persistence:** every update is appended to the room's update log. The log is compacted into a single state when it grows past a size or count, and when the room empties.
-- **Presence:** Yjs awareness. The server sets each connection's `user` from its token, so nobody can pretend to be someone else, and it clears a connection's presence when it leaves.
-- **Limits** (configurable): message size (default 1 MB), document size (default 50 MB), connections per room (default 100), messages per second per connection.
+- **Persistence:** every update is appended to the room's update log. Storage calls for a room run one at a time, in order. If one fails, the room stops writing and closes everyone with `internal`. The log is compacted into a single state when it grows past a size or count, and when the room empties.
+- **Presence:** Yjs awareness. The server sets each connection's `user` from its token, so nobody can pretend to be someone else, and it clears a connection's presence when it leaves. Each awareness client id belongs to the first connection that sends it; another connection's entries for it are dropped, except from the same user (a reconnect that arrives before the old socket closes takes it over).
+- **Readers:** `read` and `comment` connections still answer the sync handshake with what they have. The server accepts that as long as it holds nothing new (no unknown items, no deletions it doesn't already have); a real change closes the connection with `forbidden`.
+- **Limits** (configurable): message size (default 1 MB), document size (default 50 MB), connections per room including ones still authenticating (default 100), messages per second per connection (default 120), presence ids per connection (default 8), time to authenticate (default 10 seconds). The log is compacted after 500 updates or 4 MB.
 - **Lifecycle:** a room loads from storage on first connect and is unloaded a while after the last one leaves. On Cloudflare the Durable Object hibernates between messages.
 
 ### Storage interface

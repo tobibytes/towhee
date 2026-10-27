@@ -1,0 +1,37 @@
+{
+  "name": "@towhee/core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Towhee rooms: Yjs sync, presence, access checks and limits over any transport and storage. No Node or Cloudflare APIs.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@towhee/auth": "workspace:*",
+    "@towhee/protocol": "workspace:*",
+    "lib0": "^0.2.119",
+    "y-protocols": "^1.0.7",
+    "yjs": "^13.6.33"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tobibytes/towhee.git",
+    "directory": "packages/core"
+  }
+}

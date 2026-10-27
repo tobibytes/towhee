@@ -10,5 +10,6 @@ export {
   type TokenErrorCode,
   type VerifiedRoomToken,
   type VerifyOptions,
+  validateRoomKeys,
   verifyRoomToken,
 } from "./token";

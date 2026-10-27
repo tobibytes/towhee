@@ -39,6 +39,24 @@ importers:
         specifier: workspace:*
         version: link:../protocol
 
+  packages/core:
+    dependencies:
+      '@towhee/auth':
+        specifier: workspace:*
+        version: link:../auth
+      '@towhee/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      lib0:
+        specifier: ^0.2.119
+        version: 0.2.119
+      y-protocols:
+        specifier: ^1.0.7
+        version: 1.0.7(yjs@13.6.33)
+      yjs:
+        specifier: ^13.6.33
+        version: 13.6.33
+
   packages/protocol: {}
 
 packages:
@@ -1260,6 +1278,9 @@ packages:
   isexe@2.0.0:
     resolution: {integrity: sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==}
 
+  isomorphic.js@0.2.5:
+    resolution: {integrity: sha512-PIeMbHqMt4DnUP3MA/Flc0HElYjMXArsw1qwJZcm9sqR8mq3l8NYizFMty0pWwE/tzIGH3EKK5+jes5mAr85yw==}
+
   joycon@3.1.1:
     resolution: {integrity: sha512-34wB/Y7MW7bzjKRjUKTa46I2Z7eV62Rkhva+KkopW7Qvv/OSWBqvkSY7vusOPrNuZcUG3tApvdVgNB8POj3SPw==}
     engines: {node: '>=10'}
@@ -1278,6 +1299,11 @@ packages:
   kleur@4.1.5:
     resolution: {integrity: sha512-o+NO+8WrRiQEE4/7nwRJhN1HWpVmJm511pBHUxPLtp0BUISzlBplORYSmTclCnJvQq2tKu/sgl3xVpkc7ZWuQQ==}
     engines: {node: '>=6'}
+
+  lib0@0.2.119:
+    resolution: {integrity: sha512-vh+TiejVy8Xm+hCdnRfn9BthGNvNUZdEXltNjVZL3TzRIKP3s1lnQh8pWd/Q0wCgY0FPAGVVjFF4ZiHUV3LFgA==}
+    engines: {node: '>=16'}
+    hasBin: true
 
   lightningcss-android-arm64@1.33.0:
     resolution: {integrity: sha512-gEpRTalKdosp4Bb8qWtc2iOgE5SeIHlpS1up9bFq2wAyYhl1UdTObYiHe98zEM9SQvSoqQZ1IQD0JNpg3Ml5pg==}
@@ -1817,6 +1843,16 @@ packages:
         optional: true
       utf-8-validate:
         optional: true
+
+  y-protocols@1.0.7:
+    resolution: {integrity: sha512-YSVsLoXxO67J6eE/nV4AtFtT3QEotZf5sK5BHxFBXso7VDUT3Tx07IfA6hsu5Q5OmBdMkQVmFZ9QOA7fikWvnw==}
+    engines: {node: '>=16.0.0', npm: '>=8.0.0'}
+    peerDependencies:
+      yjs: ^13.0.0
+
+  yjs@13.6.33:
+    resolution: {integrity: sha512-q/UYvr1gOk4XII+Cu1CW2dINjYqJJFifTzogEaIARznrvX7uOlHsdTEXcnOBMuIsrCGEEKdNxi74kyMLZlKVfw==}
+    engines: {node: '>=16.0.0', npm: '>=8.0.0'}
 
   youch-core@0.3.3:
     resolution: {integrity: sha512-ho7XuGjLaJ2hWHoK8yFnsUGy2Y5uDpqSTq1FkHLK4/oqKtyUU1AFbOOxY4IpC9f0fTLjwYbslUz0Po5BpD1wrA==}
@@ -2825,6 +2861,8 @@ snapshots:
 
   isexe@2.0.0: {}
 
+  isomorphic.js@0.2.5: {}
+
   joycon@3.1.1: {}
 
   js-yaml@3.15.2:
@@ -2841,6 +2879,10 @@ snapshots:
       graceful-fs: 4.2.11
 
   kleur@4.1.5: {}
+
+  lib0@0.2.119:
+    dependencies:
+      isomorphic.js: 0.2.5
 
   lightningcss-android-arm64@1.33.0:
     optional: true
@@ -3327,6 +3369,15 @@ snapshots:
       - utf-8-validate
 
   ws@8.21.0: {}
+
+  y-protocols@1.0.7(yjs@13.6.33):
+    dependencies:
+      lib0: 0.2.119
+      yjs: 13.6.33
+
+  yjs@13.6.33:
+    dependencies:
+      lib0: 0.2.119
 
   youch-core@0.3.3:
     dependencies:
