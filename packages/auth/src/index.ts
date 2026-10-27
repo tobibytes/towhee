@@ -1,0 +1,14 @@
+export {
+  createRoomToken,
+  DEFAULT_EXPIRES_IN,
+  generateSecret,
+  MAX_EXPIRES_IN,
+  MIN_SECRET_LENGTH,
+  type RoomKey,
+  type RoomTokenInput,
+  TokenError,
+  type TokenErrorCode,
+  type VerifiedRoomToken,
+  type VerifyOptions,
+  verifyRoomToken,
+} from "./token";
