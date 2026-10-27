@@ -42,10 +42,10 @@ A session is done when its "Done when" list is true, CI is green and the PR is m
 
 ## 4. Node host and Docker
 
-- [ ] `@towhee/node`: WebSocket server, routing `/v1/rooms/<room>`, health endpoint, config from env
-- [ ] SQLite storage (`node:sqlite`) passing the shared storage suite
-- [ ] Docker image and a `docker compose` example with a volume
-- [ ] Graceful shutdown: compact rooms, close connections with a "server restarting" code
+- [x] `@towhee/node`: WebSocket server, routing `/v1/rooms/<room>`, health endpoint, config from env
+- [x] SQLite storage (`node:sqlite`) passing the shared storage suite
+- [x] Docker image and a `docker compose` example with a volume
+- [x] Graceful shutdown: compact rooms, close connections with a "server restarting" code
 
 **Done when:** end-to-end tests with real sockets pass: two clients converge; the server restarts and the document is still there; a bad token is refused. The Docker image builds and runs in CI.
 

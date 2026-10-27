@@ -53,3 +53,34 @@ jobs:
           if ! pnpm changeset status --since=origin/${{ github.base_ref }} >/dev/null 2>&1; then
             echo "::warning title=No changeset::This PR changes published packages but has no changeset. Run 'pnpm changeset' if users should see this in a release."
           fi
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: docker build -t towhee:ci .
+      - name: Run, sync, stop cleanly, restart, still there
+        run: |
+          export SMOKE_SECRET="$(openssl rand -hex 32)"
+          wait_healthy() {
+            for i in $(seq 1 30); do curl -sf http://127.0.0.1:8080/health && return 0; sleep 1; done
+            docker logs towhee; return 1
+          }
+          docker run -d --name towhee -p 8080:8080 -e TOWHEE_SECRET="$SMOKE_SECRET" -v towhee-data:/data towhee:ci
+          wait_healthy
+          node packages/node/scripts/docker-smoke.mjs write
+          docker stop -t 20 towhee
+          test "$(docker inspect towhee --format '{{.State.ExitCode}}')" = 0
+          docker start towhee
+          wait_healthy
+          node packages/node/scripts/docker-smoke.mjs read
+          test "$(docker inspect towhee --format '{{.Config.User}}')" = node

@@ -1,0 +1,19 @@
+# Runs Towhee with its SQLite file on a named volume.
+#   TOWHEE_SECRET=$(node -e "console.log(crypto.randomBytes(32).toString('base64url'))") docker compose up
+# Apps connect to ws://localhost:8080 and sign tokens with the same secret (key id "default").
+services:
+  towhee:
+    build:
+      context: ../..
+    image: towhee
+    ports:
+      - "8080:8080"
+    environment:
+      TOWHEE_SECRET: ${TOWHEE_SECRET:?Set TOWHEE_SECRET to a random string of at least 32 characters}
+    volumes:
+      - towhee-data:/data
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+volumes:
+  towhee-data:
