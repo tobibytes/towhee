@@ -1,0 +1,116 @@
+# Sessions
+
+Towhee is built in sessions. Each session is one branch and one PR that ends with something working and tested. Do them in order: each one builds on the last. Read `PLAN.md` before starting any of them.
+
+A session is done when its "Done when" list is true, CI is green and the PR is merged. Tick the boxes in the same PR.
+
+## 0. Repo, plan and tooling
+
+- [x] `PLAN.md`, `SESSIONS.md`, `AGENTS.md`, README, MIT license
+- [x] pnpm workspaces, Turborepo, TypeScript (strict), tsup, Vitest, Biome, Changesets
+- [x] CI: lint, build, typecheck, test on every PR
+- [x] Release workflow with npm Trusted Publishing (needs the `@towhee` npm org before the first publish)
+
+**Done when:** `pnpm install && pnpm lint && pnpm build && pnpm typecheck && pnpm test` passes on a fresh clone and in CI.
+
+## 1. Protocol and tokens
+
+- [ ] `@towhee/protocol`: message types and binary framing, access levels, close and error codes, room id validation
+- [ ] `@towhee/auth`: `createRoomToken`, `verifyRoomToken` (HS256, WebCrypto), several keys with `kid`, keys limited to a room prefix, expiry cap
+
+**Done when:** every message type round-trips through encode and decode; tokens with a bad signature, a wrong room, an expired time, an unknown `kid` or a key used outside its prefix are rejected; the same tests pass on Node and in workerd.
+
+## 2. Core room
+
+- [ ] `@towhee/core`: `Room` with Yjs sync and awareness over a `Connection` interface
+- [ ] Auth handshake (`auth` then `ready`, 10 second timeout), access checks per message
+- [ ] Presence identity set from the token; presence cleared on disconnect
+- [ ] `Storage` interface, in-memory implementation, update log and compaction
+- [ ] Limits: message size, document size, connections per room, message rate
+- [ ] Shared storage test suite that later hosts reuse
+
+**Done when:** with an in-process transport, three clients editing at once converge; a late joiner catches up; a read-only client's edit is refused and it is disconnected; presence disappears when a client leaves; a room unloaded and loaded again has the same document; each limit closes the connection with its code.
+
+## 3. Client SDK
+
+- [ ] `@towhee/client`: `createClient({ url, authEndpoint | getToken })`, `client.enter(roomId)` returning a room with a `Y.Doc`
+- [ ] Reconnect with backoff and jitter, token refresh on `token_expired`, connection status events
+- [ ] Presence API: `setPresence`, `others`, `self`, subscribe
+- [ ] Works with an existing `Y.Doc` so editor bindings can use it
+
+**Done when:** two clients against an in-process core converge; a dropped connection reconnects and catches up; an expired token is refreshed without losing edits made offline; status events fire in order.
+
+## 4. Node host and Docker
+
+- [ ] `@towhee/node`: WebSocket server, routing `/v1/rooms/<room>`, health endpoint, config from env
+- [ ] SQLite storage (`node:sqlite`) passing the shared storage suite
+- [ ] Docker image and a `docker compose` example with a volume
+- [ ] Graceful shutdown: compact rooms, close connections with a "server restarting" code
+
+**Done when:** end-to-end tests with real sockets pass: two clients converge; the server restarts and the document is still there; a bad token is refused. The Docker image builds and runs in CI.
+
+## 5. Cloudflare host
+
+- [ ] `@towhee/cloudflare`: Worker entry, room Durable Object with WebSocket hibernation
+- [ ] Durable Object SQLite storage passing the shared storage suite
+- [ ] Keys as Worker secrets; a `wrangler.toml` template; deploy guide
+- [ ] Tests in workerd with `@cloudflare/vitest-pool-workers`
+
+**Done when:** the client converges against the Worker in workerd tests; a hibernated room wakes with its document and presence intact; `wrangler deploy` of the template works on a real account (checked by Tobi).
+
+## 6. Comments and threads
+
+- [ ] Thread and comment model, anchors (Yjs relative positions or app strings), rich-text body JSON, mentions, reactions, resolve, edit, delete
+- [ ] Storage in both hosts; events pushed to the room
+- [ ] Client API: `room.threads` (list, subscribe, create, reply, react, resolve, edit, delete)
+- [ ] Access rules from `PLAN.md` enforced
+
+**Done when:** a thread created by one client appears live for another; an anchored thread stays on its text through edits; `read` clients can't comment and `comment` clients can't edit the document; both hosts pass the same tests.
+
+## 7. History
+
+- [ ] Prototype restore for any Yjs document first, and write down how it works in `PLAN.md`
+- [ ] Automatic and manual versions, list, preview (read-only `Y.Doc`), restore as a normal update that syncs and can be undone
+- [ ] Storage in both hosts
+
+**Done when:** restoring a version gives every client the old content, for text, maps, arrays and XML (TipTap) documents; the restore can be undone; both hosts pass the same tests.
+
+## 8. Notifications
+
+- [ ] Inbox per user across rooms (Durable Object per user on Cloudflare, a table on Node)
+- [ ] Notifications for mentions and replies; read and unread; mark all read
+- [ ] Live delivery over `/v1/inbox`; signed webhook to the app
+- [ ] Client API: `client.inbox`
+
+**Done when:** mentioning a user puts a notification in their inbox live, in both hosts; read state syncs across their tabs; the webhook arrives with a valid signature and retries on failure.
+
+## 9. React
+
+- [ ] `@towhee/react`: `TowheeProvider`, `RoomProvider`, `useRoom`, `useStatus`, `useSelf`, `useOthers`, `useUpdatePresence`, `useThreads`, `useHistory`, `useInbox`
+- [ ] Suspense-free by default, safe with React 19 strict mode and server rendering
+
+**Done when:** hooks are tested with Testing Library against an in-process server, including strict-mode double mounts.
+
+## 10. Junco UI (in the Junco repo)
+
+- [ ] `@junco/collab`: adapter interface and a fake-data adapter
+- [ ] UI from Junco components: avatar stack, live cursors, who's-editing bar, comment threads and sidebar, history sidebar, inbox, connection status
+- [ ] Towhee adapter on `@towhee/client`
+- [ ] Docs pages, tests and registry items, following Junco's rules
+
+**Done when:** every collab component works on fake data in the Junco docs, and the same components work against a local Towhee server.
+
+## 11. Collaborative docs demo
+
+- [ ] A docs editor page on the Junco site: TipTap on Yjs, with cursors, comments, history and inbox through Towhee
+- [ ] A Towhee deployment on Tobi's Cloudflare account and a small token endpoint for the demo (anonymous users, demo rooms only, rooms reset daily)
+
+**Done when:** two browsers on the live Junco site edit, comment and restore versions together.
+
+## 12. Release v0.1
+
+- [ ] `@towhee` npm org and trusted publishers (Tobi), first publish
+- [ ] README and docs: quick start, self-hosting on Cloudflare and with Docker, tokens and access, API reference
+- [ ] Docker image published to GitHub Container Registry
+
+**Done when:** a new project can follow the README from zero to a working shared document on both hosts.
