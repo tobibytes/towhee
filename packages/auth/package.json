@@ -1,0 +1,29 @@
+{
+  "name": "@towhee/auth",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Create Towhee room tokens in your backend and verify them on the server. WebCrypto only: runs on Node, Workers, Deno and Bun.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@towhee/protocol": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tobibytes/towhee.git",
+    "directory": "packages/auth"
+  }
+}

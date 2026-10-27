@@ -47,7 +47,7 @@ It is not a hosted multi-tenant service. There are no accounts, billing or usage
 
 ### Tokens
 
-A compact JWT (HS256 via WebCrypto). Claims:
+A standard JWT signed with HS256 (WebCrypto), so a backend in any language can mint one with its usual JWT library. Only HS256 is accepted. Claims:
 
 | Claim | Meaning |
 | --- | --- |
@@ -55,8 +55,9 @@ A compact JWT (HS256 via WebCrypto). Claims:
 | `room` | Exact room id, or a prefix ending in `*` (`doc:42`, `team:7:*`) |
 | `access` | `read`, `comment` or `write` |
 | `user` | Display info for presence and comments: `name`, `avatar`, `color` (optional) |
-| `exp` | Expiry, at most 24 hours ahead (default 1 hour) |
-| `kid` | Which key signed it, for rotation |
+| `exp` | Expiry, at most 24 hours ahead (default 1 hour). Checked with 60 seconds of clock skew |
+| `iat`, `nbf` | Optional. Tokens issued in the future or not valid yet are refused |
+| `kid` (header) | Which key signed it, for rotation. May be left out when the deployment has one key |
 
 A deployment has one or more keys. Each key can be limited to a room prefix, so one deployment can serve Talvra and Itch with separate secrets that can't open each other's rooms.
 
@@ -75,7 +76,7 @@ The server enforces this. A read-only client that sends a document update is dis
 
 ### Messages
 
-Binary WebSocket frames. The first varint is the message type:
+Binary WebSocket frames. The first byte is the message type (always below 128, so it's also a valid lib0 varuint), and the rest is the body: the y-protocols message for `sync` and `awareness`, UTF-8 JSON for the others. Every field is validated on decode. Errors have fixed close codes in the 4000-4999 range (`@towhee/protocol` `ERROR_CODES`), and each tells the client whether to refresh its token, retry or stop.
 
 | Type | Direction | Body |
 | --- | --- | --- |

@@ -11,7 +11,8 @@ Read `docs/PLAN.md` and `docs/SESSIONS.md` before starting work. The plan is the
 - Commit as `Oluwatobi Olajide <olola73@morgan.edu>`. No AI co-author trailers.
 - Before pushing: `pnpm install && pnpm lint && pnpm build && pnpm typecheck && pnpm test`.
 - Add a changeset (`pnpm changeset`) when a published package changes.
-- Releases: merge to `main`, then merge the "chore: version packages" PR. GitHub publishes through npm Trusted Publishing. Never publish by hand and never add npm tokens.
+- Packages keep `"private": true` until session 12, so merges don't try to publish to an npm org that doesn't exist yet. Until then, no changesets.
+- Releases (from session 12): merge to `main`, then merge the "chore: version packages" PR. GitHub publishes through npm Trusted Publishing. Never publish by hand and never add npm tokens.
 - Don't add services, SDKs or vendors that aren't in the plan (no Liveblocks, no hosted pub/sub). Ask first.
 - Don't deploy anything, create cloud resources or set secrets. Tobi does that.
 - Don't change Junco from this repo. Junco work (session 10 onward) happens in the Junco repo, under its own rules.
@@ -22,6 +23,7 @@ Read `docs/PLAN.md` and `docs/SESSIONS.md` before starting work. The plan is the
 - `@towhee/protocol`, `@towhee/auth` and `@towhee/core` use only web-standard APIs (WebCrypto, `Uint8Array`, `TextEncoder`), never `node:*` or Cloudflare globals. Host-specific code lives in `@towhee/node` and `@towhee/cloudflare`.
 - Treat everything from the network as untrusted: validate sizes, types and ids before use.
 - Every feature gets tests. Storage implementations all pass the shared storage suite. Behavior that both hosts have is tested on both.
+- Packages that must run everywhere (`protocol`, `auth`, `core`, `client`) run their tests twice through Vitest projects: in Node and in workerd (`@cloudflare/vitest-plugin`, no `nodejs_compat`). Copy `packages/protocol/vitest.config.ts`.
 - Biome for linting (`biome.jsonc`, lint only). Suppress a rule only with `// biome-ignore lint/<group>/<rule>: <reason>`.
 - Comments explain why, not what. Match the surrounding code.
 

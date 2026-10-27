@@ -15,8 +15,8 @@ A session is done when its "Done when" list is true, CI is green and the PR is m
 
 ## 1. Protocol and tokens
 
-- [ ] `@towhee/protocol`: message types and binary framing, access levels, close and error codes, room id validation
-- [ ] `@towhee/auth`: `createRoomToken`, `verifyRoomToken` (HS256, WebCrypto), several keys with `kid`, keys limited to a room prefix, expiry cap
+- [x] `@towhee/protocol`: message types and binary framing, access levels, close and error codes, room id validation
+- [x] `@towhee/auth`: `createRoomToken`, `verifyRoomToken` (HS256, WebCrypto), several keys with `kid`, keys limited to a room prefix, expiry cap
 
 **Done when:** every message type round-trips through encode and decode; tokens with a bad signature, a wrong room, an expired time, an unknown `kid` or a key used outside its prefix are rejected; the same tests pass on Node and in workerd.
 
@@ -109,6 +109,7 @@ A session is done when its "Done when" list is true, CI is green and the PR is m
 
 ## 12. Release v0.1
 
+- [ ] Remove `"private": true` from each package and add changesets (packages stay private until now, so merges don't try to publish)
 - [ ] `@towhee` npm org and trusted publishers (Tobi), first publish
 - [ ] README and docs: quick start, self-hosting on Cloudflare and with Docker, tokens and access, API reference
 - [ ] Docker image published to GitHub Container Registry
