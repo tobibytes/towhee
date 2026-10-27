@@ -1,0 +1,11 @@
+node_modules
+dist
+.turbo
+.wrangler
+.DS_Store
+*.log
+.env*
+!.env.example
+.dev.vars
+*.sqlite
+*.sqlite-*
