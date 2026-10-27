@@ -1,0 +1,36 @@
+{
+  "name": "@towhee/client",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Connect to a Towhee room from the browser or Node: a synced Y.Doc, presence, reconnects and token refresh.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@towhee/protocol": "workspace:*",
+    "lib0": "^0.2.119",
+    "y-protocols": "^1.0.7",
+    "yjs": "^13.6.33"
+  },
+  "devDependencies": {
+    "@towhee/auth": "workspace:*",
+    "@towhee/core": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tobibytes/towhee.git",
+    "directory": "packages/client"
+  }
+}

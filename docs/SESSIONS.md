@@ -33,10 +33,10 @@ A session is done when its "Done when" list is true, CI is green and the PR is m
 
 ## 3. Client SDK
 
-- [ ] `@towhee/client`: `createClient({ url, authEndpoint | getToken })`, `client.enter(roomId)` returning a room with a `Y.Doc`
-- [ ] Reconnect with backoff and jitter, token refresh on `token_expired`, connection status events
-- [ ] Presence API: `setPresence`, `others`, `self`, subscribe
-- [ ] Works with an existing `Y.Doc` so editor bindings can use it
+- [x] `@towhee/client`: `createClient({ url, authEndpoint })` (a URL or a function), `client.enter(roomId)` returning a room with a `Y.Doc`
+- [x] Reconnect with backoff and jitter, token refresh on `token_expired`, connection status events
+- [x] Presence API: `setPresence`, `others`, `self`, subscribe
+- [x] Works with an existing `Y.Doc` so editor bindings can use it
 
 **Done when:** two clients against an in-process core converge; a dropped connection reconnects and catches up; an expired token is refreshed without losing edits made offline; status events fire in order.
 
