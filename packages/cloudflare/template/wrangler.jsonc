@@ -1,0 +1,20 @@
+// Deploy Towhee to your Cloudflare account:
+//   npm install
+//   npx wrangler secret put TOWHEE_SECRET   # a random string of at least 32 characters
+//   npx wrangler deploy
+// Clients connect to wss://<your-worker>.<your-subdomain>.workers.dev (or a custom domain).
+{
+  "name": "towhee",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "durable_objects": { "bindings": [{ "name": "TOWHEE_ROOMS", "class_name": "TowheeRoom" }] },
+  // new_sqlite_classes: rooms keep their documents in Durable Object SQLite.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TowheeRoom"] }],
+  "vars": {
+    // Optional limits (defaults in parentheses):
+    // "TOWHEE_MAX_CONNECTIONS": "100",
+    // "TOWHEE_MAX_MESSAGE_BYTES": "1048576",
+    // "TOWHEE_MAX_DOCUMENT_BYTES": "52428800"
+  },
+  "observability": { "enabled": true }
+}

@@ -51,10 +51,10 @@ A session is done when its "Done when" list is true, CI is green and the PR is m
 
 ## 5. Cloudflare host
 
-- [ ] `@towhee/cloudflare`: Worker entry, room Durable Object with WebSocket hibernation
-- [ ] Durable Object SQLite storage passing the shared storage suite
-- [ ] Keys as Worker secrets; a `wrangler.toml` template; deploy guide
-- [ ] Tests in workerd with `@cloudflare/vitest-pool-workers`
+- [x] `@towhee/cloudflare`: Worker entry, room Durable Object with WebSocket hibernation
+- [x] Durable Object SQLite storage passing the shared storage suite
+- [x] Keys as Worker secrets; a `wrangler.jsonc` template; deploy guide
+- [x] Tests in workerd with `@cloudflare/vitest-plugin` (the renamed `vitest-pool-workers`)
 
 **Done when:** the client converges against the Worker in workerd tests; a hibernated room wakes with its document and presence intact; `wrangler deploy` of the template works on a real account (checked by Tobi).
 

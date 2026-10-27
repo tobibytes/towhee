@@ -8,6 +8,7 @@ import {
   type ErrorCode,
   encodeMessage,
   isValidRoomId,
+  PRESENCE_RESEND_EVENT,
   PROTOCOL_VERSION,
   ProtocolError,
   type RoomUser,
@@ -15,7 +16,7 @@ import {
 } from "@towhee/protocol";
 import * as decoding from "lib0/decoding";
 import * as encoding from "lib0/encoding";
-import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate, removeAwarenessStates } from "y-protocols/awareness";
+import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate, outdatedTimeout, removeAwarenessStates } from "y-protocols/awareness";
 import * as Y from "yjs";
 import { type Limits, resolveLimits } from "./limits";
 import { decodePresence, encodePresence, type PresenceEntry } from "./presence";
@@ -40,17 +41,39 @@ export interface RoomOptions {
   limits?: Partial<Limits>;
   /** Milliseconds since the epoch. Default `Date.now`. */
   now?: () => number;
-  /** For auth timeouts and token expiry. Default the global timers. */
-  timers?: Timers;
+  /**
+   * For auth timeouts, token expiry and stale presence. Default the global timers. `"manual"` sets
+   * no timers at all (a Durable Object can't hibernate with one pending): the host calls `sweep()`
+   * at `nextDeadline()` instead.
+   */
+  timers?: Timers | "manual";
+  /**
+   * A connection was added, authenticated, claimed presence or closed (`null`). Hosts that unload
+   * rooms while sockets stay open (Durable Object hibernation) store this and pass it to `restore()`.
+   */
+  onConnectionChange?: (conn: Connection, state: ConnectionState | null) => void;
   /** Called when the last connection leaves. Hosts usually unload the room after a while. */
   onEmpty?: (room: Room) => void;
   /** Unexpected errors: storage failures and bugs. The affected connections are closed with `internal`. */
   onError?: (error: unknown, room: Room) => void;
 }
 
+/** What a host keeps to restore a connection after the room was unloaded. Plain JSON. */
+export interface ConnectionState {
+  id: string;
+  phase: "pending" | "ready";
+  connectedAt: number;
+  user?: RoomUser;
+  access?: Access;
+  expiresAt?: number;
+  /** Awareness client ids the connection owns. */
+  presence: number[];
+}
+
 interface ConnectionData {
   id: string;
   phase: "pending" | "ready" | "closed";
+  connectedAt: number;
   user?: RoomUser;
   access?: Access;
   expiresAt?: number;
@@ -114,8 +137,10 @@ export class Room {
   private readonly storage: Storage;
   private readonly keys: RoomKey | readonly RoomKey[];
   private readonly now: () => number;
-  private readonly timers: Timers;
+  /** Undefined in manual mode. */
+  private readonly timers: Timers | undefined;
   private readonly onEmpty?: (room: Room) => void;
+  private readonly onConnectionChange?: (conn: Connection, state: ConnectionState | null) => void;
   private readonly onError?: (error: unknown, room: Room) => void;
   private readonly connections = new Map<Connection, ConnectionData>();
   private readonly presenceOwners = new Map<number, Connection>();
@@ -142,8 +167,9 @@ export class Room {
     this.storage = options.storage;
     this.keys = options.keys;
     this.now = options.now ?? Date.now;
-    this.timers = options.timers ?? defaultTimers;
+    this.timers = options.timers === "manual" ? undefined : (options.timers ?? defaultTimers);
     this.onEmpty = options.onEmpty;
+    this.onConnectionChange = options.onConnectionChange;
     this.onError = options.onError;
 
     this.doc = new Y.Doc();
@@ -152,6 +178,8 @@ export class Room {
     this.awareness = new Awareness(this.doc);
     // The server has no presence of its own.
     this.awareness.setLocalState(null);
+    // y-protocols starts an interval to expire stale presence. Manual mode does that in sweep().
+    if (!this.timers) clearInterval((this.awareness as unknown as { _checkInterval: ReturnType<typeof setInterval> })._checkInterval);
 
     this.doc.on("update", (update: Uint8Array, origin: unknown) => this.onDocumentUpdate(update, origin));
     this.awareness.on("update", ({ added, updated, removed }: Record<"added" | "updated" | "removed", number[]>, origin: unknown) =>
@@ -174,18 +202,97 @@ export class Room {
       this.reject(conn, "room_full", "The room is full");
       return;
     }
+    const now = this.now();
     const data: ConnectionData = {
       id: randomId(),
       phase: "pending",
+      connectedAt: now,
       presence: new Set(),
       queue: Promise.resolve(),
-      windowStart: this.now(),
+      windowStart: now,
       windowCount: 0,
     };
-    data.authTimer = this.timers.setTimeout(() => {
+    data.authTimer = this.timers?.setTimeout(() => {
       if (data.phase === "pending") this.fail(conn, "auth_timeout", "No auth message arrived in time");
     }, this.limits.authTimeoutMs);
     this.connections.set(conn, data);
+    this.notify(conn, data);
+  }
+
+  /**
+   * Puts back a connection whose socket stayed open while the room was unloaded (Durable Object
+   * hibernation), from what `onConnectionChange` gave the host. Its presence comes back when the
+   * clients resend it: call `requestPresence()` once every connection is restored.
+   */
+  restore(conn: Connection, state: ConnectionState): void {
+    if (this.state !== "open" || this.connections.has(conn)) return;
+    const now = this.now();
+    const data: ConnectionData = {
+      id: state.id,
+      phase: state.phase,
+      connectedAt: state.connectedAt,
+      user: state.user,
+      access: state.access,
+      expiresAt: state.expiresAt,
+      presence: new Set(state.presence),
+      queue: Promise.resolve(),
+      windowStart: now,
+      windowCount: 0,
+    };
+    this.connections.set(conn, data);
+    for (const id of data.presence) this.presenceOwners.set(id, conn);
+    if (data.phase === "pending") {
+      data.authTimer = this.timers?.setTimeout(
+        () => {
+          if (data.phase === "pending") this.fail(conn, "auth_timeout", "No auth message arrived in time");
+        },
+        Math.max(0, state.connectedAt + this.limits.authTimeoutMs - now),
+      );
+    } else if (data.expiresAt !== undefined) {
+      data.expiryTimer = this.timers?.setTimeout(
+        () => this.fail(conn, "token_expired", "The token has expired"),
+        Math.max(0, data.expiresAt + CLOCK_SKEW_MS - now),
+      );
+    }
+  }
+
+  /** Asks every client to send its presence again, after the room lost it. */
+  requestPresence(): void {
+    for (const [conn, data] of this.connections) {
+      if (data.phase === "ready") this.send(conn, data, { type: "event", name: PRESENCE_RESEND_EVENT });
+    }
+  }
+
+  /**
+   * Manual mode: closes connections that didn't authenticate in time or whose token expired, and
+   * drops presence nobody renewed for 30 seconds. Safe to call any time.
+   */
+  sweep(now: number = this.now()): void {
+    for (const [conn, data] of [...this.connections]) {
+      if (data.phase === "pending" && now >= data.connectedAt + this.limits.authTimeoutMs) {
+        this.fail(conn, "auth_timeout", "No auth message arrived in time");
+      } else if (data.phase === "ready" && data.expiresAt !== undefined && now > data.expiresAt + CLOCK_SKEW_MS) {
+        this.fail(conn, "token_expired", "The token has expired");
+      }
+    }
+    const stale: number[] = [];
+    for (const [clientId, meta] of this.awareness.meta) {
+      if (this.awareness.states.has(clientId) && now - meta.lastUpdated >= outdatedTimeout) stale.push(clientId);
+    }
+    if (stale.length > 0) removeAwarenessStates(this.awareness, stale, "timeout");
+  }
+
+  /** Manual mode: when `sweep()` next has work to do, in epoch milliseconds, or undefined. */
+  nextDeadline(): number | undefined {
+    let next = Number.POSITIVE_INFINITY;
+    for (const data of this.connections.values()) {
+      if (data.phase === "pending") next = Math.min(next, data.connectedAt + this.limits.authTimeoutMs);
+      else if (data.expiresAt !== undefined) next = Math.min(next, data.expiresAt + CLOCK_SKEW_MS + 1);
+    }
+    for (const [clientId, meta] of this.awareness.meta) {
+      if (this.awareness.states.has(clientId)) next = Math.min(next, meta.lastUpdated + outdatedTimeout);
+    }
+    return Number.isFinite(next) ? next : undefined;
   }
 
   /** A frame from a socket. Frames from one connection are handled in order; await to know it's done. */
@@ -248,6 +355,10 @@ export class Room {
         this.fail(conn, "token_expired", "The token has expired");
         return;
       }
+      if (data.phase === "pending" && now >= data.connectedAt + this.limits.authTimeoutMs) {
+        this.fail(conn, "auth_timeout", "No auth message arrived in time");
+        return;
+      }
 
       const message = decodeClientMessage(frame);
       if (data.phase === "pending") {
@@ -303,15 +414,16 @@ export class Room {
       return;
     }
 
-    this.timers.clearTimeout(data.authTimer);
+    this.timers?.clearTimeout(data.authTimer);
     data.phase = "ready";
     data.user = token.user;
     data.access = token.access;
     data.expiresAt = token.expiresAt;
-    data.expiryTimer = this.timers.setTimeout(
+    data.expiryTimer = this.timers?.setTimeout(
       () => this.fail(conn, "token_expired", "The token has expired"),
       Math.max(0, token.expiresAt + CLOCK_SKEW_MS - this.now()),
     );
+    this.notify(conn, data);
 
     this.send(conn, data, { type: "ready", protocol: PROTOCOL_VERSION, connectionId: data.id, access: token.access, user: token.user });
     this.send(conn, data, syncFrame(SYNC_STEP1, Y.encodeStateVector(this.doc)));
@@ -367,6 +479,7 @@ export class Room {
   private handlePresence(conn: Connection, data: ConnectionData, bytes: Uint8Array): void {
     const entries = parse("awareness update", () => decodePresence(bytes));
     const kept: PresenceEntry[] = [];
+    const claimed = new Set<Connection>();
     for (const entry of entries) {
       const owner = this.presenceOwners.get(entry.clientId);
       if (owner !== undefined && owner !== conn) {
@@ -376,17 +489,31 @@ export class Room {
         if (ownerData?.user?.id !== data.user!.id) continue;
         ownerData.presence.delete(entry.clientId);
         this.presenceOwners.delete(entry.clientId);
+        claimed.add(owner);
       }
       if (!data.presence.has(entry.clientId)) {
         if (data.presence.size >= this.limits.maxPresencePerConnection) continue;
         data.presence.add(entry.clientId);
         this.presenceOwners.set(entry.clientId, conn);
+        claimed.add(conn);
       }
       // Identity always comes from the token, whatever the client put in its state.
       const state = entry.state === null ? null : { ...(isRecord(entry.state) ? entry.state : {}), user: data.user };
       kept.push({ ...entry, state });
     }
-    if (kept.length > 0) applyAwarenessUpdate(this.awareness, encodePresence(kept), conn);
+    if (kept.length > 0) {
+      applyAwarenessUpdate(this.awareness, encodePresence(kept), conn);
+      // y-protocols stamps the wall clock; use the room's clock so sweep() and tests agree.
+      const now = this.now();
+      for (const { clientId } of kept) {
+        const meta = this.awareness.meta.get(clientId);
+        if (meta) meta.lastUpdated = now;
+      }
+    }
+    for (const changed of claimed) {
+      const changedData = this.connections.get(changed);
+      if (changedData) this.notify(changed, changedData);
+    }
   }
 
   /* Document and presence changes ------------------------------------------------------------- */
@@ -474,12 +601,30 @@ export class Room {
     this.cleanup(conn, data);
   }
 
+  private notify(conn: Connection, data: ConnectionData): void {
+    if (!this.onConnectionChange) return;
+    if (data.phase === "closed") {
+      this.onConnectionChange(conn, null);
+      return;
+    }
+    this.onConnectionChange(conn, {
+      id: data.id,
+      phase: data.phase,
+      connectedAt: data.connectedAt,
+      ...(data.user ? { user: data.user } : {}),
+      ...(data.access ? { access: data.access } : {}),
+      ...(data.expiresAt !== undefined ? { expiresAt: data.expiresAt } : {}),
+      presence: [...data.presence],
+    });
+  }
+
   private cleanup(conn: Connection, data: ConnectionData): void {
     if (data.phase === "closed") return;
     data.phase = "closed";
-    this.timers.clearTimeout(data.authTimer);
-    this.timers.clearTimeout(data.expiryTimer);
+    this.timers?.clearTimeout(data.authTimer);
+    this.timers?.clearTimeout(data.expiryTimer);
     this.connections.delete(conn);
+    this.notify(conn, data);
 
     const owned = [...data.presence].filter((id) => this.presenceOwners.get(id) === conn);
     for (const id of owned) this.presenceOwners.delete(id);

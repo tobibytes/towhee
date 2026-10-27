@@ -1,5 +1,5 @@
 import { createRoomToken, type RoomKey, type RoomTokenInput } from "@towhee/auth";
-import { decodeServerMessage, encodeMessage, errorCodeFromClose, PROTOCOL_VERSION, type ServerMessage } from "@towhee/protocol";
+import { decodeServerMessage, encodeMessage, errorCodeFromClose, PRESENCE_RESEND_EVENT, PROTOCOL_VERSION, type ServerMessage } from "@towhee/protocol";
 import * as decoding from "lib0/decoding";
 import * as encoding from "lib0/encoding";
 import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate } from "y-protocols/awareness";
@@ -97,7 +97,7 @@ export class TestClient {
   private pending: Promise<void>[] = [];
   readonly conn: Connection;
 
-  constructor(private readonly room: Room) {
+  constructor(private room: Room) {
     this.conn = {
       send: (frame) => this.onFrame(frame),
       close: (code, reason) => {
@@ -149,6 +149,11 @@ export class TestClient {
     return this.received.flatMap((m) => (m.type === "error" ? [m.code] : []));
   }
 
+  /** Points this client's socket at another Room instance, as if the server reloaded the room. */
+  rebind(room: Room): void {
+    this.room = room;
+  }
+
   disconnect(): void {
     this.room.disconnect(this.conn);
   }
@@ -172,6 +177,8 @@ export class TestClient {
       if (encoding.length(encoder) > 0) this.sendRaw(encodeMessage({ type: "sync", data: encoding.toUint8Array(encoder) }));
     } else if (message.type === "awareness") {
       applyAwarenessUpdate(this.awareness, message.data, this);
+    } else if (message.type === "event" && message.name === PRESENCE_RESEND_EVENT && this.awareness.getLocalState() !== null) {
+      this.sendRaw(encodeMessage({ type: "awareness", data: encodeAwarenessUpdate(this.awareness, [this.doc.clientID]) }));
     }
   }
 }

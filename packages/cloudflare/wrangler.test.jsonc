@@ -1,0 +1,13 @@
+// Test-only Worker: test/worker.ts re-exports the package. Not a deploy config; see template/.
+{
+  "name": "towhee-test",
+  "main": "test/worker.ts",
+  "compatibility_date": "2026-10-01",
+  "durable_objects": { "bindings": [{ "name": "TOWHEE_ROOMS", "class_name": "TowheeRoom" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TowheeRoom"] }],
+  "vars": {
+    // A dummy test key, not a real secret.
+    "TOWHEE_SECRET": "cloudflare-test-key-not-a-secret-0000",
+    "TOWHEE_AUTH_TIMEOUT_MS": "300"
+  }
+}
