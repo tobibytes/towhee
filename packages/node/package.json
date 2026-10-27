@@ -1,0 +1,43 @@
+{
+  "name": "@towhee/node",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Run Towhee on Node: a WebSocket server with SQLite storage. Also published as the towhee Docker image.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "bin": {
+    "towhee": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@towhee/auth": "workspace:*",
+    "@towhee/core": "workspace:*",
+    "@towhee/protocol": "workspace:*",
+    "ws": "^8.22.0",
+    "yjs": "^13.6.33"
+  },
+  "devDependencies": {
+    "@towhee/client": "workspace:*",
+    "@types/ws": "^8.18.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tobibytes/towhee.git",
+    "directory": "packages/node"
+  }
+}

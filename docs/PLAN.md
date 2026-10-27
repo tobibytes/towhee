@@ -143,7 +143,7 @@ The core ships an in-memory implementation for tests. Each host ships a durable 
 
 ### Hosts
 
-**Node** (`@towhee/node`, Docker image `towhee`): one process, rooms in memory, SQLite on a volume. Configured by env: `TOWHEE_KEYS`, `TOWHEE_DATA`, `TOWHEE_WEBHOOK_URL`, limits. A health endpoint. One instance only in v1. Running several instances needs a pub/sub layer (Redis or Postgres) and comes after v1.
+**Node** (`@towhee/node`, Docker image `towhee`): one process, rooms in memory, SQLite (`node:sqlite`, WAL) on a volume. Configured by env: `TOWHEE_SECRET` or `TOWHEE_KEYS`, `TOWHEE_DATA`, port, limits (see its README); `TOWHEE_WEBHOOK_URL` comes with notifications. `GET /health`. Empty rooms are saved and freed after 30 seconds; a room isn't loaded again until its save finishes. WebSocket pings every 30 seconds drop dead clients. On SIGTERM every room is saved and clients get `server_restarting`, so they reconnect on their own. One instance only in v1. Running several instances needs a pub/sub layer (Redis or Postgres) and comes after v1.
 
 **Cloudflare** (`@towhee/cloudflare`): a Worker routes `/v1/rooms/<room>` to a room Durable Object by name and `/v1/inbox` to the user's inbox Durable Object. Rooms use WebSocket hibernation and Durable Object SQLite storage. Keys are Worker secrets. Deploy with `wrangler deploy` from a template.
 
