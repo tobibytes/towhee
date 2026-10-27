@@ -1,0 +1,43 @@
+name: Release
+
+# On main: opens (or updates) a "chore: version packages" PR from pending changesets.
+# Merging that PR publishes the bumped packages to npm with npm Trusted Publishing (GitHub OIDC):
+# no token secret, and every version gets a provenance statement. The first version of each
+# package is published once by hand (`pnpm release`), then a trusted publisher pointing at this
+# workflow is added on npmjs.com.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency: release-${{ github.ref }}
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write # npm Trusted Publishing (OIDC) + provenance
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24 # npm 11.5+, needed for Trusted Publishing
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm test
+      - name: Version PR or publish
+        uses: changesets/action@v1
+        with:
+          version: pnpm version-packages
+          publish: pnpm release
+          title: "chore: version packages"
+          commit: "chore: version packages"
+          createGithubReleases: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
