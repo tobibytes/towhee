@@ -69,9 +69,9 @@ A session is done when its "Done when" list is true, CI is green and the PR is m
 
 ## 7. History
 
-- [ ] Prototype restore for any Yjs document first, and write down how it works in `PLAN.md`
-- [ ] Automatic and manual versions, list, preview (read-only `Y.Doc`), restore as a normal update that syncs and can be undone
-- [ ] Storage in both hosts
+- [x] Prototype restore for any Yjs document first, and write down how it works in `PLAN.md`
+- [x] Automatic and manual versions, list, preview (read-only `Y.Doc`), restore as a normal update that syncs and can be undone
+- [x] Storage in both hosts
 
 **Done when:** restoring a version gives every client the old content, for text, maps, arrays and XML (TipTap) documents; the restore can be undone; both hosts pass the same tests.
 

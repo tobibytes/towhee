@@ -1,5 +1,6 @@
 export { DEFAULT_LIMITS, type Limits, resolveLimits } from "./limits";
 export { decodePresence, encodePresence, type PresenceEntry } from "./presence";
 export { type Connection, type ConnectionState, Room, type RoomOptions, type Timers } from "./room";
-export { MemoryStorage, MemoryThreadStore, type Storage, type ThreadStore } from "./storage";
+export { History } from "./history";
+export { MemoryStorage, MemoryThreadStore, MemoryVersionStore, type Storage, type ThreadStore, type VersionStore } from "./storage";
 export { type Caller, type Outcome, RequestFailure, Threads } from "./threads";

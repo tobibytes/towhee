@@ -16,6 +16,10 @@ export interface Limits {
   compactAfterUpdates: number;
   /** ...or after this many logged bytes. Default 4 MB. */
   compactAfterBytes: number;
+  /** Save an automatic version once the document has changed and this long has passed since the last. Default 5 minutes. */
+  autoVersionEveryMs: number;
+  /** Automatic versions to keep per room; older ones are deleted. Saved and restore versions are kept. Default 50. */
+  keepAutoVersions: number;
 }
 
 export const DEFAULT_LIMITS: Limits = {
@@ -27,6 +31,8 @@ export const DEFAULT_LIMITS: Limits = {
   maxPresencePerConnection: 8,
   compactAfterUpdates: 500,
   compactAfterBytes: 4 * 1024 * 1024,
+  autoVersionEveryMs: 5 * 60 * 1000,
+  keepAutoVersions: 50,
 };
 
 export function resolveLimits(overrides: Partial<Limits> = {}): Limits {

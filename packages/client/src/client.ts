@@ -17,7 +17,11 @@ import * as encoding from "lib0/encoding";
 import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate, removeAwarenessStates } from "y-protocols/awareness";
 import * as syncProtocol from "y-protocols/sync";
 import * as Y from "yjs";
+import { RequestError } from "./errors";
+import { History } from "./history";
 import { Threads } from "./threads";
+
+export { RequestError };
 
 /** The parts of the standard WebSocket the client uses. Browsers, Node 22+, Deno, Bun and Workers all have it. */
 export interface SocketLike {
@@ -87,15 +91,6 @@ interface Events {
   error: RoomError;
 }
 
-/** Thrown when a room request fails. */
-export class RequestError extends Error {
-  readonly code: ErrorCode | "disconnected";
-  constructor(code: ErrorCode | "disconnected", message: string) {
-    super(message);
-    this.name = "RequestError";
-    this.code = code;
-  }
-}
 
 const OPEN = 1;
 const defaultTimers: Timers = {
@@ -166,6 +161,7 @@ export class RoomConnection {
 
   private socket: SocketLike | null = null;
   private threadsApi: Threads | undefined;
+  private historyApi: History | undefined;
   private left = false;
   private failures = 0;
   private retryTimer: unknown;
@@ -203,15 +199,23 @@ export class RoomConnection {
     return () => this.listeners[event].delete(listener);
   }
 
+  private readonly transport = {
+    request: (method: string, params?: unknown) => this.request(method, params),
+    onEvent: (listener: (event: { name: string; data?: unknown }) => void) => this.on("event", listener),
+    onConnected: (listener: () => void) => this.on("status", (status) => status === "connected" && listener()),
+    isConnected: () => this.status === "connected",
+  };
+
   /** The room's comment threads. Created on first use; it fetches the list and keeps it current. */
   get threads(): Threads {
-    this.threadsApi ??= new Threads({
-      request: (method, params) => this.request(method, params),
-      onEvent: (listener) => this.on("event", listener),
-      onConnected: (listener) => this.on("status", (status) => status === "connected" && listener()),
-      isConnected: () => this.status === "connected",
-    });
+    this.threadsApi ??= new Threads(this.transport);
     return this.threadsApi;
+  }
+
+  /** Saved versions of the document: list, preview, save and restore. Created on first use. */
+  get history(): History {
+    this.historyApi ??= new History(this.transport, this.doc, () => this.self?.access);
+    return this.historyApi;
   }
 
   /** Everyone else in the room, with identities from their tokens. */

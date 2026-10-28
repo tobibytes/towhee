@@ -131,6 +131,28 @@ describe("server", () => {
     expect(c.threads.list().map((t) => t.comments.length)).toEqual([2]);
   });
 
+  it("restores versions for everyone and keeps them through a restart", async () => {
+    const dir = tempDir();
+    const first = await start(join(dir, "db.sqlite"));
+    const a = enter(first.url, { userId: "ada" });
+    const b = enter(first.url, { userId: "bob" });
+    await until(() => a.synced && b.synced, "sync");
+    a.doc.getText("t").insert(0, "version one");
+    await until(() => text(b) === "version one", "edit");
+    const v1 = await a.history.save("one");
+    a.doc.getText("t").delete(0, 11);
+    a.doc.getText("t").insert(0, "version two");
+    await until(() => text(b) === "version two", "second edit");
+    await b.history.restore(v1.id);
+    await until(() => text(a) === "version one", "restore to reach the other client");
+    await first.stop();
+    const second = await start(join(dir, "db.sqlite"), first.port);
+    const c = enter(second.url, { userId: "cy" });
+    await until(() => c.synced, "sync after restart");
+    expect(text(c)).toBe("version one");
+    expect((await c.history.refresh()).map((v) => v.kind)).toEqual(expect.arrayContaining(["restore", "manual"]));
+  });
+
   it("refuses bad tokens", async () => {
     const { url } = await start(join(tempDir(), "db.sqlite"));
     const client = createClient({ url, authEndpoint: async () => "bad.token.here" });
