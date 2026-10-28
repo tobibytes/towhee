@@ -1,4 +1,4 @@
-import type { Thread } from "@towhee/protocol";
+import type { Thread, Version } from "@towhee/protocol";
 import * as Y from "yjs";
 import type { Storage } from "./storage";
 
@@ -115,6 +115,45 @@ export function storageSuite(name: string, create: () => Storage | Promise<Stora
       expect(await storage.threads.get("r1", "t1")).toBeNull();
       expect((await storage.threads.list("r1")).map((t) => t.id)).toEqual(["t2"]);
       expect(await storage.threads.count("r2")).toBe(1);
+    });
+
+    it("stores versions with their state, newest first, per room", async () => {
+      const storage = await create();
+      const { doc } = build("version one");
+      const state = Y.encodeStateAsUpdate(doc);
+      const v = (id: string, createdAt: number, extra: Partial<Version> = {}): Version => ({ id, kind: "auto", createdAt, size: state.length, ...extra });
+      expect(await storage.versions.list("r1")).toEqual([]);
+      expect(await storage.versions.get("r1", "v1")).toBeNull();
+      await storage.versions.save("r1", v("v1", 1), state);
+      await storage.versions.save("r1", v("v2", 2, { kind: "manual", name: "Draft ✓", createdBy: { id: "u1", name: "Zoë" } }), state);
+      await storage.versions.save("r2", v("v3", 3), state);
+      expect((await storage.versions.list("r1")).map((x) => x.id)).toEqual(["v2", "v1"]);
+      const got = await storage.versions.get("r1", "v2");
+      expect(got?.version).toEqual(v("v2", 2, { kind: "manual", name: "Draft ✓", createdBy: { id: "u1", name: "Zoë" } }));
+      expect(text(got!.state)).toBe("version one");
+      expect(await storage.versions.get("r1", "v3")).toBeNull();
+      await storage.versions.delete("r1", "v1");
+      expect((await storage.versions.list("r1")).map((x) => x.id)).toEqual(["v2"]);
+      expect((await storage.versions.list("r2")).map((x) => x.id)).toEqual(["v3"]);
+    });
+
+    it("keeps save order for versions and threads made in the same millisecond", async () => {
+      const storage = await create();
+      const state = Y.encodeStateAsUpdate(build("x").doc);
+      for (const id of ["v_b", "v_a", "v_c"]) await storage.versions.save("r", { id, kind: "manual", createdAt: 5, size: state.length }, state);
+      expect((await storage.versions.list("r")).map((v) => v.id)).toEqual(["v_c", "v_a", "v_b"]);
+      const thread = (id: string): Thread => ({ id, resolved: false, createdBy: "u", createdAt: 5, updatedAt: 5, comments: [] });
+      for (const id of ["t_b", "t_a", "t_c"]) await storage.threads.put("r", thread(id));
+      await storage.threads.put("r", { ...thread("t_b"), resolved: true }); // an update keeps its place
+      expect((await storage.threads.list("r")).map((t) => t.id)).toEqual(["t_b", "t_a", "t_c"]);
+    });
+
+    it("stores large versions", async () => {
+      const storage = await create();
+      const { doc } = build("y".repeat(300 * 1024));
+      const state = Y.encodeStateAsUpdate(doc);
+      await storage.versions.save("big", { id: "v1", kind: "auto", createdAt: 1, size: state.length }, state);
+      expect(text((await storage.versions.get("big", "v1"))!.state).length).toBe(300 * 1024);
     });
 
     it("stores large documents", async () => {

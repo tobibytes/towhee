@@ -65,3 +65,4 @@ export {
   type ThreadMetadata,
   textBody,
 } from "./comments";
+export { isVersion, MAX_VERSION_NAME_LENGTH, type Version, type VersionKind } from "./history";

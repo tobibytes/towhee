@@ -22,7 +22,8 @@ import * as Y from "yjs";
 import { type Limits, resolveLimits } from "./limits";
 import { decodePresence, encodePresence, type PresenceEntry } from "./presence";
 import type { Storage } from "./storage";
-import { RequestFailure, Threads } from "./threads";
+import { History } from "./history";
+import { type Caller, type Outcome, RequestFailure, Threads } from "./threads";
 
 /** One client's socket, as the host sees it. The host calls the room's `connect`, `receive` and `disconnect`. */
 export interface Connection {
@@ -147,6 +148,9 @@ export class Room {
   private readonly connections = new Map<Connection, ConnectionData>();
   private readonly presenceOwners = new Map<number, Connection>();
   private readonly threads: Threads;
+  private readonly history: History;
+  private lastVersionAt: number;
+  private changedSinceVersion = false;
   private persisting: Promise<void> = Promise.resolve();
   private storageFailed = false;
   private loggedUpdates = 0;
@@ -161,10 +165,11 @@ export class Room {
     validateRoomKeys(options.keys);
     const limits = resolveLimits(options.limits);
     const saved = await options.storage.loadDocument(options.id);
-    return new Room(options, limits, saved);
+    const latest = (await options.storage.versions.list(options.id))[0];
+    return new Room(options, limits, saved, latest?.createdAt);
   }
 
-  private constructor(options: RoomOptions, limits: Limits, saved: Uint8Array | null) {
+  private constructor(options: RoomOptions, limits: Limits, saved: Uint8Array | null, lastVersionAt: number | undefined) {
     this.id = options.id;
     this.limits = limits;
     this.storage = options.storage;
@@ -174,6 +179,8 @@ export class Room {
     this.onEmpty = options.onEmpty;
     this.onConnectionChange = options.onConnectionChange;
     this.threads = new Threads(this.id, this.storage.threads, this.now);
+    this.history = new History(this.id, this.storage.versions, this.now, limits.keepAutoVersions, () => this.snapshot());
+    this.lastVersionAt = lastVersionAt ?? this.now();
     this.onError = options.onError;
 
     this.doc = new Y.Doc();
@@ -330,6 +337,7 @@ export class Room {
     }
     this.state = "closing";
     for (const conn of [...this.connections.keys()]) this.fail(conn, code, "The room is closing");
+    this.saveAutoVersion();
     if (this.loggedUpdates > 0) this.compact();
     await this.flush();
     this.awareness.destroy();
@@ -464,12 +472,16 @@ export class Room {
   private async handleRequest(conn: Connection, data: ConnectionData, message: RequestMessage): Promise<void> {
     const respondError = (code: ErrorCode, text: string) =>
       this.send(conn, data, { type: "response", id: message.id, ok: false, error: { code, message: text } });
-    if (!Threads.handles(message.method)) {
+    const caller: Caller = { user: data.user!, access: data.access! };
+    let run: Promise<Outcome>;
+    if (Threads.handles(message.method)) run = this.threads.handle(message.method, message.params, caller);
+    else if (History.handles(message.method)) run = this.history.handle(message.method, message.params, caller);
+    else {
       respondError("not_found", `Unknown method ${message.method}`);
       return;
     }
     try {
-      const outcome = await this.threads.handle(message.method, message.params, { user: data.user!, access: data.access! });
+      const outcome = await run;
       this.send(conn, data, { type: "response", id: message.id, ok: true, result: outcome.result });
       for (const event of outcome.events) this.broadcastEvent(event.name, event.data);
     } catch (error) {
@@ -558,6 +570,8 @@ export class Room {
     this.persist(() => this.storage.appendUpdate(this.id, update));
     this.loggedUpdates++;
     this.loggedBytes += update.length;
+    this.changedSinceVersion = true;
+    if (this.now() - this.lastVersionAt >= this.limits.autoVersionEveryMs) this.saveAutoVersion();
     if (this.loggedUpdates >= this.limits.compactAfterUpdates || this.loggedBytes >= this.limits.compactAfterBytes) this.compact();
   }
 
@@ -570,6 +584,23 @@ export class Room {
   }
 
   /* Storage --------------------------------------------------------------------------------- */
+
+  /** The document's state for a version. Restarts the automatic version clock at the same moment. */
+  private snapshot(): Uint8Array {
+    this.lastVersionAt = this.now();
+    this.changedSinceVersion = false;
+    return Y.encodeStateAsUpdate(this.doc);
+  }
+
+  /** Saves an automatic version if the document changed since the last one. */
+  private saveAutoVersion(): void {
+    if (!this.changedSinceVersion) return;
+    const state = this.snapshot();
+    this.persist(async () => {
+      const version = await this.history.saveAuto(state);
+      this.broadcastEvent("version.saved", { version });
+    });
+  }
 
   private compact(): void {
     const state = Y.encodeStateAsUpdate(this.doc);
@@ -662,6 +693,7 @@ export class Room {
     if (owned.length > 0) removeAwarenessStates(this.awareness, owned, null);
 
     if (this.connections.size === 0 && this.state === "open") {
+      this.saveAutoVersion();
       if (this.loggedUpdates > 0) this.compact();
       this.onEmpty?.(this);
     }

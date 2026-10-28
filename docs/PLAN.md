@@ -135,9 +135,11 @@ The core ships an in-memory implementation for tests. Each host ships a durable 
 
 ### History
 
-- **Versions:** the full document state at a point in time, with an author, time and optional name. Saved automatically after a stretch of editing (default: after 5 minutes of activity, at most every 5 minutes) and on request.
-- **Preview:** the client loads a version's state into a separate, read-only `Y.Doc`.
-- **Restore:** a new update that brings the live document back to the version's content, so the restore itself syncs to everyone and can be undone. How to compute this for any Yjs document is the hardest part of the project. Session 7 prototypes it before building on it.
+- **Versions:** the full document state at a point in time, with its kind (`auto`, `manual`, `restore`), time, size, and for saved ones the user and an optional name. Stored apart from the document (`Storage.versions`); on Durable Objects the state is chunked like the document.
+- **Automatic versions:** once the document has changed and 5 minutes have passed since the last version, the next change saves one; so does the room emptying or closing with unsaved changes. Any version (automatic or saved) restarts that clock. Only the newest 50 automatic versions are kept; saved and restore versions stay.
+- **Requests:** `history.list` (newest first; ties in save order), `history.get` (description plus the state as base64; Cloudflare caps a WebSocket message at 32 MiB, so very large documents can't be fetched this way yet), `history.save` (`write` access, optional `name`, `restoredFrom` for restores). `version.saved` goes to the room.
+- **Preview:** the client loads a version's state into a separate `Y.Doc`.
+- **Restore** happens on the client, in one transaction (`restoreDocument`): it loads the version into a scratch doc and, for every top-level type, writes the old content back into the live one. Text is cleared and rewritten from the old delta (formatting and embeds kept); maps get removed keys deleted and changed keys set; arrays and XML fragments are cleared and refilled with clones. Because it's an ordinary change, it syncs to everyone like any edit, merges with concurrent edits, and the app's `Y.UndoManager` undoes it when the transaction's origin is one it tracks. History isn't rolled back; the old content is written again. A top-level type's kind comes from the app's declaration (`doc.getText`...), else from its content (keys → map, text or formatting → text, XML nodes → XML, other items → array); apps can also pass `types`. After restoring, the client saves a `restore` version recording what it restored. Restoring needs `write` access.
 
 ### Notifications
 

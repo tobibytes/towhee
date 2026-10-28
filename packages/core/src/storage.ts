@@ -1,4 +1,4 @@
-import type { Thread } from "@towhee/protocol";
+import type { Thread, Version } from "@towhee/protocol";
 import * as Y from "yjs";
 
 /**
@@ -16,11 +16,52 @@ export interface Storage {
   compact(room: string, state: Uint8Array): Promise<void>;
   /** Comment threads. Each thread is stored whole, comments included. */
   threads: ThreadStore;
+  /** Saved versions of documents. */
+  versions: VersionStore;
+}
+
+/** Versions of a room's document: a description plus the full state. */
+export interface VersionStore {
+  save(room: string, version: Version, state: Uint8Array): Promise<void>;
+  /** Descriptions only, newest first (ties: last saved first). */
+  list(room: string): Promise<Version[]>;
+  get(room: string, id: string): Promise<{ version: Version; state: Uint8Array } | null>;
+  delete(room: string, id: string): Promise<void>;
+}
+
+export class MemoryVersionStore implements VersionStore {
+  private readonly rooms = new Map<string, Map<string, { version: Version; state: Uint8Array }>>();
+
+  async save(room: string, version: Version, state: Uint8Array): Promise<void> {
+    let versions = this.rooms.get(room);
+    if (!versions) {
+      versions = new Map();
+      this.rooms.set(room, versions);
+    }
+    versions.set(version.id, { version: structuredClone(version), state: state.slice() });
+  }
+
+  async list(room: string): Promise<Version[]> {
+    // Newest first; versions saved in the same millisecond, last saved first.
+    return [...(this.rooms.get(room)?.values() ?? [])]
+      .reverse()
+      .map((v) => structuredClone(v.version))
+      .sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  async get(room: string, id: string): Promise<{ version: Version; state: Uint8Array } | null> {
+    const saved = this.rooms.get(room)?.get(id);
+    return saved ? { version: structuredClone(saved.version), state: saved.state.slice() } : null;
+  }
+
+  async delete(room: string, id: string): Promise<void> {
+    this.rooms.get(room)?.delete(id);
+  }
 }
 
 /** Calls for one room's threads never overlap: the room makes one thread change at a time. */
 export interface ThreadStore {
-  /** Every thread in the room, oldest first. */
+  /** Every thread in the room, oldest first (ties in creation order). */
   list(room: string): Promise<Thread[]>;
   get(room: string, id: string): Promise<Thread | null>;
   /** Creates or replaces a thread. */
@@ -34,7 +75,8 @@ export class MemoryThreadStore implements ThreadStore {
   private readonly rooms = new Map<string, Map<string, Thread>>();
 
   async list(room: string): Promise<Thread[]> {
-    return [...(this.rooms.get(room)?.values() ?? [])].map((t) => structuredClone(t)).sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
+    // Stable sort over insertion order: threads created in the same millisecond stay in creation order.
+    return [...(this.rooms.get(room)?.values() ?? [])].map((t) => structuredClone(t)).sort((a, b) => a.createdAt - b.createdAt);
   }
 
   async get(room: string, id: string): Promise<Thread | null> {
@@ -64,6 +106,7 @@ export class MemoryThreadStore implements ThreadStore {
 export class MemoryStorage implements Storage {
   private readonly rooms = new Map<string, { state: Uint8Array | null; log: Uint8Array[] }>();
   readonly threads: ThreadStore = new MemoryThreadStore();
+  readonly versions: VersionStore = new MemoryVersionStore();
 
   async loadDocument(room: string): Promise<Uint8Array | null> {
     const saved = this.rooms.get(room);

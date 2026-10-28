@@ -1,5 +1,5 @@
-import type { ConnectionState, Storage, ThreadStore } from "@towhee/core";
-import type { Thread } from "@towhee/protocol";
+import type { ConnectionState, Storage, ThreadStore, VersionStore } from "@towhee/core";
+import type { Thread, Version } from "@towhee/protocol";
 import * as Y from "yjs";
 
 /**
@@ -20,6 +20,7 @@ const toBlob = (bytes: Uint8Array): ArrayBuffer => bytes.slice().buffer;
 export class DurableObjectSqlStorage implements Storage {
   private readonly sql: SqlStorage;
   readonly threads: ThreadStore;
+  readonly versions: VersionStore;
 
   constructor(private readonly storage: DurableObjectStorage) {
     this.sql = storage.sql;
@@ -30,8 +31,11 @@ export class DurableObjectSqlStorage implements Storage {
       CREATE TABLE IF NOT EXISTS towhee_connections (id TEXT PRIMARY KEY, state TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS towhee_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS towhee_threads (room TEXT NOT NULL, id TEXT NOT NULL, created_at REAL NOT NULL, data TEXT NOT NULL, PRIMARY KEY (room, id));
+      CREATE TABLE IF NOT EXISTS towhee_versions (room TEXT NOT NULL, id TEXT NOT NULL, created_at REAL NOT NULL, info TEXT NOT NULL, PRIMARY KEY (room, id));
+      CREATE TABLE IF NOT EXISTS towhee_version_chunks (room TEXT NOT NULL, id TEXT NOT NULL, chunk INTEGER NOT NULL, data BLOB NOT NULL, PRIMARY KEY (room, id, chunk));
     `);
     this.threads = new SqlThreadStore(this.sql);
+    this.versions = new SqlVersionStore(this.sql, storage);
   }
 
   async loadDocument(room: string): Promise<Uint8Array | null> {
@@ -90,13 +94,67 @@ export class DurableObjectSqlStorage implements Storage {
   }
 }
 
+/** Versions: the description in one table, the state in 1 MB chunks in another. */
+class SqlVersionStore implements VersionStore {
+  constructor(
+    private readonly sql: SqlStorage,
+    private readonly storage: DurableObjectStorage,
+  ) {}
+
+  async save(room: string, version: Version, state: Uint8Array): Promise<void> {
+    this.storage.transactionSync(() => {
+      this.sql.exec("DELETE FROM towhee_version_chunks WHERE room = ? AND id = ?", room, version.id);
+      this.sql.exec(
+        "INSERT INTO towhee_versions (room, id, created_at, info) VALUES (?, ?, ?, ?) ON CONFLICT (room, id) DO UPDATE SET info = excluded.info",
+        room,
+        version.id,
+        version.createdAt,
+        JSON.stringify(version),
+      );
+      for (let offset = 0, chunk = 0; offset < state.length || chunk === 0; offset += STATE_CHUNK_BYTES, chunk++) {
+        this.sql.exec(
+          "INSERT INTO towhee_version_chunks (room, id, chunk, data) VALUES (?, ?, ?, ?)",
+          room,
+          version.id,
+          chunk,
+          toBlob(state.subarray(offset, offset + STATE_CHUNK_BYTES)),
+        );
+      }
+    });
+  }
+
+  async list(room: string): Promise<Version[]> {
+    return this.sql
+      .exec("SELECT info FROM towhee_versions WHERE room = ? ORDER BY created_at DESC, rowid DESC", room)
+      .toArray()
+      .map((r) => JSON.parse(r.info as string) as Version);
+  }
+
+  async get(room: string, id: string): Promise<{ version: Version; state: Uint8Array } | null> {
+    const row = this.sql.exec("SELECT info FROM towhee_versions WHERE room = ? AND id = ?", room, id).toArray()[0];
+    if (!row) return null;
+    const chunks = this.sql
+      .exec("SELECT data FROM towhee_version_chunks WHERE room = ? AND id = ? ORDER BY chunk", room, id)
+      .toArray()
+      .map((r) => toBytes(r.data));
+    return { version: JSON.parse(row.info as string) as Version, state: concat(chunks) };
+  }
+
+  async delete(room: string, id: string): Promise<void> {
+    this.storage.transactionSync(() => {
+      this.sql.exec("DELETE FROM towhee_versions WHERE room = ? AND id = ?", room, id);
+      this.sql.exec("DELETE FROM towhee_version_chunks WHERE room = ? AND id = ?", room, id);
+    });
+  }
+}
+
 /** Threads as JSON rows. Comment limits keep a thread well under the 2 MB row cap. */
 class SqlThreadStore implements ThreadStore {
   constructor(private readonly sql: SqlStorage) {}
 
   async list(room: string): Promise<Thread[]> {
     return this.sql
-      .exec("SELECT data FROM towhee_threads WHERE room = ? ORDER BY created_at, id", room)
+      .exec("SELECT data FROM towhee_threads WHERE room = ? ORDER BY created_at, rowid", room)
       .toArray()
       .map((r) => JSON.parse(r.data as string) as Thread);
   }

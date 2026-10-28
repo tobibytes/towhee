@@ -34,9 +34,33 @@ export class ManualTime implements Timers {
   }
 }
 
-/** Lets queued microtasks and macrotasks run, several rounds deep. */
+/**
+ * Work the fake network still has going: frames in transit, frames a room is still handling,
+ * tokens being signed, rooms loading. `settle()` waits until it reaches zero, so tests don't
+ * depend on how many event loop turns a machine needs.
+ */
+let inFlight = 0;
+
+function track<T>(work: Promise<T>): Promise<T> {
+  inFlight++;
+  return work.finally(() => inFlight--);
+}
+
+function later(fn: () => void): void {
+  inFlight++;
+  setTimeout(() => {
+    inFlight--;
+    fn();
+  }, 0);
+}
+
+/** Waits until the fake network has nothing left in flight (and stays that way for a few turns). */
 export async function settle(): Promise<void> {
-  for (let i = 0; i < 10; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+  let quiet = 0;
+  for (let i = 0; i < 2000 && quiet < 3; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    quiet = inFlight === 0 ? quiet + 1 : 0;
+  }
 }
 
 /**
@@ -52,12 +76,12 @@ export class TestServer {
   private users = 0;
 
   token = (input: Partial<RoomTokenInput> = {}) =>
-    createRoomToken({ userId: `user-${++this.users}`, room: "doc:1", access: "write", ...input }, key, { now: this.time.current });
+    track(createRoomToken({ userId: `user-${++this.users}`, room: "doc:1", access: "write", ...input }, key, { now: this.time.current }));
 
   room(id: string): Promise<Room> {
     let room = this.rooms.get(id);
     if (!room) {
-      room = Room.load({ id, storage: this.storage, keys: key, now: this.time.now, timers: this.time });
+      room = track(Room.load({ id, storage: this.storage, keys: key, now: this.time.now, timers: this.time }));
       this.rooms.set(id, room);
     }
     return room;
@@ -103,15 +127,15 @@ export class FakeSocket implements SocketLike {
     this.conn = {
       send: (frame) => {
         const copy = frame.slice();
-        setTimeout(() => {
+        later(() => {
           if (this.readyState === 1) this.onmessage?.({ data: copy.buffer });
-        }, 0);
+        });
       },
       close: (code, reason) => this.finish(code, reason),
     };
     const match = /\/v1\/rooms\/([^/]+)$/.exec(url);
     if (!match) throw new Error(`Unexpected URL ${url}`);
-    void server.room(decodeURIComponent(match[1]!)).then((room) => {
+    void track(server.room(decodeURIComponent(match[1]!))).then((room) => {
       if (this.readyState !== 0) return;
       this.room = room;
       this.readyState = 1;
@@ -123,9 +147,9 @@ export class FakeSocket implements SocketLike {
   send(data: Uint8Array): void {
     if (this.readyState !== 1) throw new Error("Socket not open");
     const copy = data.slice();
-    setTimeout(() => {
-      if (this.readyState === 1) void this.room?.receive(this.conn, copy);
-    }, 0);
+    later(() => {
+      if (this.readyState === 1 && this.room) void track(this.room.receive(this.conn, copy));
+    });
   }
 
   /** The client closes. */
@@ -145,6 +169,6 @@ export class FakeSocket implements SocketLike {
     if (this.readyState >= 2) return;
     this.readyState = 3;
     this.server.sockets.delete(this);
-    setTimeout(() => this.onclose?.({ code, reason }), 0);
+    later(() => this.onclose?.({ code, reason }));
   }
 }

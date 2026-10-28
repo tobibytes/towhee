@@ -1,8 +1,8 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
-import type { Storage, ThreadStore } from "@towhee/core";
-import type { Thread } from "@towhee/protocol";
+import type { Storage, ThreadStore, VersionStore } from "@towhee/core";
+import type { Thread, Version } from "@towhee/protocol";
 import * as Y from "yjs";
 
 /**
@@ -12,6 +12,7 @@ import * as Y from "yjs";
 export class SqliteStorage implements Storage {
   readonly db: DatabaseSync;
   readonly threads: ThreadStore;
+  readonly versions: VersionStore;
   private readonly statements: {
     state: StatementSync;
     log: StatementSync;
@@ -31,8 +32,10 @@ export class SqliteStorage implements Storage {
       CREATE TABLE IF NOT EXISTS updates (id INTEGER PRIMARY KEY AUTOINCREMENT, room TEXT NOT NULL, data BLOB NOT NULL) STRICT;
       CREATE INDEX IF NOT EXISTS updates_by_room ON updates (room, id);
       CREATE TABLE IF NOT EXISTS threads (room TEXT NOT NULL, id TEXT NOT NULL, created_at REAL NOT NULL, data TEXT NOT NULL, PRIMARY KEY (room, id)) STRICT;
+      CREATE TABLE IF NOT EXISTS versions (room TEXT NOT NULL, id TEXT NOT NULL, created_at REAL NOT NULL, info TEXT NOT NULL, state BLOB NOT NULL, PRIMARY KEY (room, id)) STRICT;
     `);
     this.threads = new SqliteThreadStore(this.db);
+    this.versions = new SqliteVersionStore(this.db);
     this.statements = {
       state: this.db.prepare("SELECT state FROM documents WHERE room = ?"),
       log: this.db.prepare("SELECT data FROM updates WHERE room = ? ORDER BY id"),
@@ -71,6 +74,40 @@ export class SqliteStorage implements Storage {
   }
 }
 
+/** Versions: the description as JSON, the state as a blob. */
+class SqliteVersionStore implements VersionStore {
+  private readonly saveStatement: StatementSync;
+  private readonly listStatement: StatementSync;
+  private readonly getStatement: StatementSync;
+  private readonly deleteStatement: StatementSync;
+
+  constructor(db: DatabaseSync) {
+    this.saveStatement = db.prepare(
+      "INSERT INTO versions (room, id, created_at, info, state) VALUES (?, ?, ?, ?, ?) ON CONFLICT (room, id) DO UPDATE SET info = excluded.info, state = excluded.state",
+    );
+    this.listStatement = db.prepare("SELECT info FROM versions WHERE room = ? ORDER BY created_at DESC, rowid DESC");
+    this.getStatement = db.prepare("SELECT info, state FROM versions WHERE room = ? AND id = ?");
+    this.deleteStatement = db.prepare("DELETE FROM versions WHERE room = ? AND id = ?");
+  }
+
+  async save(room: string, version: Version, state: Uint8Array): Promise<void> {
+    this.saveStatement.run(room, version.id, version.createdAt, JSON.stringify(version), state);
+  }
+
+  async list(room: string): Promise<Version[]> {
+    return (this.listStatement.all(room) as { info: string }[]).map((r) => JSON.parse(r.info) as Version);
+  }
+
+  async get(room: string, id: string): Promise<{ version: Version; state: Uint8Array } | null> {
+    const row = this.getStatement.get(room, id) as { info: string; state: Uint8Array } | undefined;
+    return row ? { version: JSON.parse(row.info) as Version, state: row.state } : null;
+  }
+
+  async delete(room: string, id: string): Promise<void> {
+    this.deleteStatement.run(room, id);
+  }
+}
+
 /** Threads as JSON rows, one per thread. */
 class SqliteThreadStore implements ThreadStore {
   private readonly listStatement: StatementSync;
@@ -80,7 +117,7 @@ class SqliteThreadStore implements ThreadStore {
   private readonly countStatement: StatementSync;
 
   constructor(db: DatabaseSync) {
-    this.listStatement = db.prepare("SELECT data FROM threads WHERE room = ? ORDER BY created_at, id");
+    this.listStatement = db.prepare("SELECT data FROM threads WHERE room = ? ORDER BY created_at, rowid");
     this.getStatement = db.prepare("SELECT data FROM threads WHERE room = ? AND id = ?");
     this.putStatement = db.prepare(
       "INSERT INTO threads (room, id, created_at, data) VALUES (?, ?, ?, ?) ON CONFLICT (room, id) DO UPDATE SET data = excluded.data",

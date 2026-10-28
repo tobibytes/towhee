@@ -27,6 +27,12 @@ function durableStorage(): Storage {
     loadDocument: (room) => call((s) => s.loadDocument(room)),
     appendUpdate: (room, update) => call((s) => s.appendUpdate(room, update)),
     compact: (room, state) => call((s) => s.compact(room, state)),
+    versions: {
+      save: (room, version, state) => call((s) => s.versions.save(room, version, state)),
+      list: (room) => call((s) => s.versions.list(room)),
+      get: (room, id) => call((s) => s.versions.get(room, id)),
+      delete: (room, id) => call((s) => s.versions.delete(room, id)),
+    },
     threads: {
       list: (room) => call((s) => s.threads.list(room)),
       get: (room, id) => call((s) => s.threads.get(room, id)),
@@ -56,6 +62,9 @@ describe("Durable Object SQLite", () => {
     const loaded = new Y.Doc();
     Y.applyUpdate(loaded, (await storage.loadDocument("big"))!);
     expect(loaded.getText("t").toString()).toBe(random);
+    // Versions are chunked the same way.
+    await storage.versions.save("big", { id: "v1", kind: "auto", createdAt: 1, size: state.length }, state);
+    expect((await storage.versions.get("big", "v1"))!.state).toEqual(state);
   });
 });
 
@@ -137,6 +146,25 @@ describe("rooms on Durable Objects", () => {
     const c = join({ userId: "cy" }, "cf:threads");
     await until(() => c.threads.ready, "threads after eviction");
     expect(c.threads.list().map((t) => t.comments.length)).toEqual([2]);
+  });
+
+  it("restores versions for everyone and keeps them through an eviction", async () => {
+    const a = join({ userId: "ada" }, "cf:history");
+    const b = join({ userId: "bob" }, "cf:history");
+    await until(() => a.synced && b.synced, "sync");
+    a.doc.getText("t").insert(0, "version one");
+    await until(() => text(b) === "version one", "edit");
+    const v1 = await a.history.save("one");
+    a.doc.getText("t").delete(0, 11);
+    a.doc.getText("t").insert(0, "version two");
+    await until(() => text(b) === "version two", "second edit");
+    await b.history.restore(v1.id);
+    await until(() => text(a) === "version one", "restore to reach the other client");
+    await evictDurableObject(env.TOWHEE_ROOMS.getByName("cf:history"));
+    const c = join({ userId: "cy" }, "cf:history");
+    await until(() => c.synced, "sync after eviction");
+    expect(text(c)).toBe("version one");
+    expect((await c.history.refresh()).map((v) => v.kind)).toEqual(expect.arrayContaining(["restore", "manual"]));
   });
 
   it("closes connections that never authenticate, from the alarm", async () => {
