@@ -2,7 +2,7 @@ import { encodeMessage, ERROR_CODES, MESSAGE_TYPES, PROTOCOL_VERSION } from "@to
 import { afterEach, describe, expect, it } from "vitest";
 import { encodeAwarenessUpdate } from "y-protocols/awareness";
 import * as Y from "yjs";
-import { decodePresence, encodePresence, MemoryStorage, Room, type Storage } from "../src";
+import { decodePresence, encodePresence, MemoryStorage, MemoryThreadStore, Room, type Storage } from "../src";
 import { storageSuite } from "../src/testing";
 import { key, type Setup, setup } from "./harness";
 
@@ -337,8 +337,8 @@ describe("auth", () => {
   it("answers unknown requests without closing", async () => {
     const s = await start();
     const c = await s.join();
-    await c.sendRaw(encodeMessage({ type: "request", id: 5, method: "threads.list" }));
-    expect(c.received.at(-1)).toEqual({ type: "response", id: 5, ok: false, error: { code: "not_found", message: "Unknown method threads.list" } });
+    await c.sendRaw(encodeMessage({ type: "request", id: 5, method: "files.list" }));
+    expect(c.received.at(-1)).toEqual({ type: "response", id: 5, ok: false, error: { code: "not_found", message: "Unknown method files.list" } });
     expect(c.closed).toBeUndefined();
   });
 });
@@ -444,6 +444,7 @@ describe("persistence", () => {
         throw new Error("disk full");
       },
       compact: async () => {},
+      threads: new MemoryThreadStore(),
     };
     const errors: unknown[] = [];
     const s = await start({ storage, onError: (e) => errors.push(e) });

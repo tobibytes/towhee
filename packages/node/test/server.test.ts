@@ -114,6 +114,23 @@ describe("server", () => {
     expect(text(fresh)).toBe("survives restarts");
   });
 
+  it("shares threads live and keeps them through a restart", async () => {
+    const dir = tempDir();
+    const first = await start(join(dir, "db.sqlite"));
+    const a = enter(first.url, { userId: "ada" });
+    const b = enter(first.url, { userId: "bob", access: "comment" });
+    await until(() => a.synced && b.synced && b.threads.ready, "sync");
+    const thread = await a.threads.create({ body: "Looks good?", anchor: { type: "app", id: "p1" } });
+    await until(() => b.threads.list().length === 1, "thread to arrive");
+    await b.threads.reply(thread.id, "Yes");
+    await until(() => a.threads.get(thread.id)?.comments.length === 2, "reply to arrive");
+    await first.stop();
+    const second = await start(join(dir, "db.sqlite"), first.port);
+    const c = enter(second.url, { userId: "cy" });
+    await until(() => c.threads.ready, "threads after restart");
+    expect(c.threads.list().map((t) => t.comments.length)).toEqual([2]);
+  });
+
   it("refuses bad tokens", async () => {
     const { url } = await start(join(tempDir(), "db.sqlite"));
     const client = createClient({ url, authEndpoint: async () => "bad.token.here" });

@@ -1,7 +1,8 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
-import type { Storage } from "@towhee/core";
+import type { Storage, ThreadStore } from "@towhee/core";
+import type { Thread } from "@towhee/protocol";
 import * as Y from "yjs";
 
 /**
@@ -10,6 +11,7 @@ import * as Y from "yjs";
  */
 export class SqliteStorage implements Storage {
   readonly db: DatabaseSync;
+  readonly threads: ThreadStore;
   private readonly statements: {
     state: StatementSync;
     log: StatementSync;
@@ -28,7 +30,9 @@ export class SqliteStorage implements Storage {
       CREATE TABLE IF NOT EXISTS documents (room TEXT PRIMARY KEY, state BLOB NOT NULL) STRICT;
       CREATE TABLE IF NOT EXISTS updates (id INTEGER PRIMARY KEY AUTOINCREMENT, room TEXT NOT NULL, data BLOB NOT NULL) STRICT;
       CREATE INDEX IF NOT EXISTS updates_by_room ON updates (room, id);
+      CREATE TABLE IF NOT EXISTS threads (room TEXT NOT NULL, id TEXT NOT NULL, created_at REAL NOT NULL, data TEXT NOT NULL, PRIMARY KEY (room, id)) STRICT;
     `);
+    this.threads = new SqliteThreadStore(this.db);
     this.statements = {
       state: this.db.prepare("SELECT state FROM documents WHERE room = ?"),
       log: this.db.prepare("SELECT data FROM updates WHERE room = ? ORDER BY id"),
@@ -64,5 +68,45 @@ export class SqliteStorage implements Storage {
 
   close(): void {
     this.db.close();
+  }
+}
+
+/** Threads as JSON rows, one per thread. */
+class SqliteThreadStore implements ThreadStore {
+  private readonly listStatement: StatementSync;
+  private readonly getStatement: StatementSync;
+  private readonly putStatement: StatementSync;
+  private readonly deleteStatement: StatementSync;
+  private readonly countStatement: StatementSync;
+
+  constructor(db: DatabaseSync) {
+    this.listStatement = db.prepare("SELECT data FROM threads WHERE room = ? ORDER BY created_at, id");
+    this.getStatement = db.prepare("SELECT data FROM threads WHERE room = ? AND id = ?");
+    this.putStatement = db.prepare(
+      "INSERT INTO threads (room, id, created_at, data) VALUES (?, ?, ?, ?) ON CONFLICT (room, id) DO UPDATE SET data = excluded.data",
+    );
+    this.deleteStatement = db.prepare("DELETE FROM threads WHERE room = ? AND id = ?");
+    this.countStatement = db.prepare("SELECT count(*) AS n FROM threads WHERE room = ?");
+  }
+
+  async list(room: string): Promise<Thread[]> {
+    return (this.listStatement.all(room) as { data: string }[]).map((r) => JSON.parse(r.data) as Thread);
+  }
+
+  async get(room: string, id: string): Promise<Thread | null> {
+    const row = this.getStatement.get(room, id) as { data: string } | undefined;
+    return row ? (JSON.parse(row.data) as Thread) : null;
+  }
+
+  async put(room: string, thread: Thread): Promise<void> {
+    this.putStatement.run(room, thread.id, thread.createdAt, JSON.stringify(thread));
+  }
+
+  async delete(room: string, id: string): Promise<void> {
+    this.deleteStatement.run(room, id);
+  }
+
+  async count(room: string): Promise<number> {
+    return Number((this.countStatement.get(room) as { n: number | bigint }).n);
   }
 }

@@ -1,4 +1,5 @@
-import type { ConnectionState, Storage } from "@towhee/core";
+import type { ConnectionState, Storage, ThreadStore } from "@towhee/core";
+import type { Thread } from "@towhee/protocol";
 import * as Y from "yjs";
 
 /**
@@ -18,6 +19,7 @@ const toBlob = (bytes: Uint8Array): ArrayBuffer => bytes.slice().buffer;
  */
 export class DurableObjectSqlStorage implements Storage {
   private readonly sql: SqlStorage;
+  readonly threads: ThreadStore;
 
   constructor(private readonly storage: DurableObjectStorage) {
     this.sql = storage.sql;
@@ -27,7 +29,9 @@ export class DurableObjectSqlStorage implements Storage {
       CREATE INDEX IF NOT EXISTS towhee_updates_by_room ON towhee_updates (room, id);
       CREATE TABLE IF NOT EXISTS towhee_connections (id TEXT PRIMARY KEY, state TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS towhee_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS towhee_threads (room TEXT NOT NULL, id TEXT NOT NULL, created_at REAL NOT NULL, data TEXT NOT NULL, PRIMARY KEY (room, id));
     `);
+    this.threads = new SqlThreadStore(this.sql);
   }
 
   async loadDocument(room: string): Promise<Uint8Array | null> {
@@ -83,6 +87,41 @@ export class DurableObjectSqlStorage implements Storage {
 
   setMeta(key: string, value: string): void {
     this.sql.exec("INSERT INTO towhee_meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value", key, value);
+  }
+}
+
+/** Threads as JSON rows. Comment limits keep a thread well under the 2 MB row cap. */
+class SqlThreadStore implements ThreadStore {
+  constructor(private readonly sql: SqlStorage) {}
+
+  async list(room: string): Promise<Thread[]> {
+    return this.sql
+      .exec("SELECT data FROM towhee_threads WHERE room = ? ORDER BY created_at, id", room)
+      .toArray()
+      .map((r) => JSON.parse(r.data as string) as Thread);
+  }
+
+  async get(room: string, id: string): Promise<Thread | null> {
+    const row = this.sql.exec("SELECT data FROM towhee_threads WHERE room = ? AND id = ?", room, id).toArray()[0];
+    return row ? (JSON.parse(row.data as string) as Thread) : null;
+  }
+
+  async put(room: string, thread: Thread): Promise<void> {
+    this.sql.exec(
+      "INSERT INTO towhee_threads (room, id, created_at, data) VALUES (?, ?, ?, ?) ON CONFLICT (room, id) DO UPDATE SET data = excluded.data",
+      room,
+      thread.id,
+      thread.createdAt,
+      JSON.stringify(thread),
+    );
+  }
+
+  async delete(room: string, id: string): Promise<void> {
+    this.sql.exec("DELETE FROM towhee_threads WHERE room = ? AND id = ?", room, id);
+  }
+
+  async count(room: string): Promise<number> {
+    return Number(this.sql.exec("SELECT count(*) AS n FROM towhee_threads WHERE room = ?", room).one().n);
   }
 }
 

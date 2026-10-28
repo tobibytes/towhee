@@ -149,6 +149,22 @@ export class TestClient {
     return this.received.flatMap((m) => (m.type === "error" ? [m.code] : []));
   }
 
+  private nextRequest = 1;
+
+  /** Sends a request and returns the server's response (it arrives before the promise resolves). */
+  async request(method: string, params?: unknown): Promise<Extract<ServerMessage, { type: "response" }>> {
+    const id = this.nextRequest++;
+    await this.sendRaw(encodeMessage({ type: "request", id, method, ...(params === undefined ? {} : { params }) }));
+    const response = this.received.find((m) => m.type === "response" && m.id === id);
+    if (response?.type !== "response") throw new Error(`No response to ${method}`);
+    return response;
+  }
+
+  /** Data of every event received with this name. */
+  events(name: string): unknown[] {
+    return this.received.flatMap((m) => (m.type === "event" && m.name === name ? [m.data] : []));
+  }
+
   /** Points this client's socket at another Room instance, as if the server reloaded the room. */
   rebind(room: Room): void {
     this.room = room;

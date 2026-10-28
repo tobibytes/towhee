@@ -17,6 +17,7 @@ import * as encoding from "lib0/encoding";
 import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate, removeAwarenessStates } from "y-protocols/awareness";
 import * as syncProtocol from "y-protocols/sync";
 import * as Y from "yjs";
+import { Threads } from "./threads";
 
 /** The parts of the standard WebSocket the client uses. Browsers, Node 22+, Deno, Bun and Workers all have it. */
 export interface SocketLike {
@@ -164,6 +165,7 @@ export class RoomConnection {
   lastError: RoomError | null = null;
 
   private socket: SocketLike | null = null;
+  private threadsApi: Threads | undefined;
   private left = false;
   private failures = 0;
   private retryTimer: unknown;
@@ -199,6 +201,17 @@ export class RoomConnection {
   on<K extends keyof Events>(event: K, listener: (value: Events[K]) => void): () => void {
     this.listeners[event].add(listener);
     return () => this.listeners[event].delete(listener);
+  }
+
+  /** The room's comment threads. Created on first use; it fetches the list and keeps it current. */
+  get threads(): Threads {
+    this.threadsApi ??= new Threads({
+      request: (method, params) => this.request(method, params),
+      onEvent: (listener) => this.on("event", listener),
+      onConnected: (listener) => this.on("status", (status) => status === "connected" && listener()),
+      isConnected: () => this.status === "connected",
+    });
+    return this.threadsApi;
   }
 
   /** Everyone else in the room, with identities from their tokens. */

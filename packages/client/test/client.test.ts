@@ -275,9 +275,9 @@ describe("requests", () => {
   it("resolves server answers and rejects when disconnected", async () => {
     server = new TestServer();
     const a = join("ada");
-    await expect(a.request("threads.list")).rejects.toMatchObject({ code: "disconnected" });
+    await expect(a.request("files.list")).rejects.toMatchObject({ code: "disconnected" });
     await settle();
-    const err = await a.request("threads.list").catch((e: unknown) => e);
+    const err = await a.request("files.list").catch((e: unknown) => e);
     expect(err).toBeInstanceOf(RequestError);
     expect((err as RequestError).code).toBe("not_found");
   });

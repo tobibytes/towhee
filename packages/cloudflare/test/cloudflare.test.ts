@@ -27,6 +27,13 @@ function durableStorage(): Storage {
     loadDocument: (room) => call((s) => s.loadDocument(room)),
     appendUpdate: (room, update) => call((s) => s.appendUpdate(room, update)),
     compact: (room, state) => call((s) => s.compact(room, state)),
+    threads: {
+      list: (room) => call((s) => s.threads.list(room)),
+      get: (room, id) => call((s) => s.threads.get(room, id)),
+      put: (room, thread) => call((s) => s.threads.put(room, thread)),
+      delete: (room, id) => call((s) => s.threads.delete(room, id)),
+      count: (room) => call((s) => s.threads.count(room)),
+    },
   };
 }
 
@@ -116,6 +123,20 @@ describe("rooms on Durable Objects", () => {
     const b = join({}, "cf:durable");
     await until(() => b.synced, "sync after eviction");
     expect(text(b)).toBe("kept in sqlite");
+  });
+
+  it("shares threads live and keeps them through an eviction", async () => {
+    const a = join({ userId: "ada" }, "cf:threads");
+    const b = join({ userId: "bob", access: "comment" }, "cf:threads");
+    await until(() => a.synced && b.synced && b.threads.ready, "sync");
+    const thread = await a.threads.create({ body: "Looks good?", anchor: { type: "app", id: "p1" } });
+    await until(() => b.threads.list().length === 1, "thread to arrive");
+    await b.threads.reply(thread.id, "Yes");
+    await until(() => a.threads.get(thread.id)?.comments.length === 2, "reply to arrive");
+    await evictDurableObject(env.TOWHEE_ROOMS.getByName("cf:threads"));
+    const c = join({ userId: "cy" }, "cf:threads");
+    await until(() => c.threads.ready, "threads after eviction");
+    expect(c.threads.list().map((t) => t.comments.length)).toEqual([2]);
   });
 
   it("closes connections that never authenticate, from the alarm", async () => {
