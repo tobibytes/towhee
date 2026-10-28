@@ -60,10 +60,10 @@ A session is done when its "Done when" list is true, CI is green and the PR is m
 
 ## 6. Comments and threads
 
-- [ ] Thread and comment model, anchors (Yjs relative positions or app strings), rich-text body JSON, mentions, reactions, resolve, edit, delete
-- [ ] Storage in both hosts; events pushed to the room
-- [ ] Client API: `room.threads` (list, subscribe, create, reply, react, resolve, edit, delete)
-- [ ] Access rules from `PLAN.md` enforced
+- [x] Thread and comment model, anchors (Yjs relative positions or app strings), rich-text body JSON, mentions, reactions, resolve, edit, delete
+- [x] Storage in both hosts; events pushed to the room
+- [x] Client API: `room.threads` (list, subscribe, create, reply, react, resolve, edit, delete)
+- [x] Access rules from `PLAN.md` enforced
 
 **Done when:** a thread created by one client appears live for another; an anchored thread stays on its text through edits; `read` clients can't comment and `comment` clients can't edit the document; both hosts pass the same tests.
 

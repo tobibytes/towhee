@@ -127,6 +127,11 @@ The core ships an in-memory implementation for tests. Each host ships a durable 
 - A comment has an id, its thread, its author (`sub` from the token, plus a copy of `user` display info), a body as a small rich-text JSON (paragraphs, bold, italic, code, links, mentions), reactions, and created, edited and deleted times.
 - Changes are stored by the host and pushed to everyone in the room as events.
 - Mentions are user ids. The app supplies names for autocomplete through the client (`resolveUsers`); the engine stores only ids.
+- Requests: `threads.list`, `threads.create`, `threads.reply`, `threads.edit`, `threads.deleteComment` (soft: the body is emptied), `threads.react` (`add: true|false`, one per user), `threads.resolve`, `threads.setMetadata`, `threads.delete`. Events: `thread.created` and `thread.updated` carry the whole thread, `thread.deleted` its id; the caller gets them too, so every tab updates the same way.
+- `comment` access may change its own comments and threads; `write` may change anyone's. The author always comes from the token.
+- All thread changes in a room run one at a time, so concurrent replies never overwrite each other. A thread is stored whole as one JSON row; limits keep it well under 2 MB: 8 KB per comment body, 200 comments per thread, 5000 threads per room, 50 reaction kinds per comment.
+- Bodies are checked strictly: only known node types and fields, links only to http, https or mailto.
+- The client keeps `room.threads` current from events and refetches after every reconnect. `createTextAnchor(text, index, length)` and `resolveTextAnchor(doc, anchor)` turn a range into Yjs relative positions and back; typing at an anchor's edges stays outside it, and it resolves to null once its text is deleted.
 
 ### History
 

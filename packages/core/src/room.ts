@@ -11,6 +11,7 @@ import {
   PRESENCE_RESEND_EVENT,
   PROTOCOL_VERSION,
   ProtocolError,
+  type RequestMessage,
   type RoomUser,
   type ServerMessage,
 } from "@towhee/protocol";
@@ -21,6 +22,7 @@ import * as Y from "yjs";
 import { type Limits, resolveLimits } from "./limits";
 import { decodePresence, encodePresence, type PresenceEntry } from "./presence";
 import type { Storage } from "./storage";
+import { RequestFailure, Threads } from "./threads";
 
 /** One client's socket, as the host sees it. The host calls the room's `connect`, `receive` and `disconnect`. */
 export interface Connection {
@@ -144,6 +146,7 @@ export class Room {
   private readonly onError?: (error: unknown, room: Room) => void;
   private readonly connections = new Map<Connection, ConnectionData>();
   private readonly presenceOwners = new Map<number, Connection>();
+  private readonly threads: Threads;
   private persisting: Promise<void> = Promise.resolve();
   private storageFailed = false;
   private loggedUpdates = 0;
@@ -170,6 +173,7 @@ export class Room {
     this.timers = options.timers === "manual" ? undefined : (options.timers ?? defaultTimers);
     this.onEmpty = options.onEmpty;
     this.onConnectionChange = options.onConnectionChange;
+    this.threads = new Threads(this.id, this.storage.threads, this.now);
     this.onError = options.onError;
 
     this.doc = new Y.Doc();
@@ -376,12 +380,7 @@ export class Room {
           this.handlePresence(conn, data, message.data);
           return;
         case "request":
-          this.send(conn, data, {
-            type: "response",
-            id: message.id,
-            ok: false,
-            error: { code: "not_found", message: `Unknown method ${message.method}` },
-          });
+          await this.handleRequest(conn, data, message);
           return;
       }
     } catch (error) {
@@ -456,6 +455,38 @@ export class Room {
       return;
     }
     parse("update", () => Y.applyUpdate(this.doc, update, conn));
+  }
+
+  /**
+   * Calls to room features. A failed call gets an error response; the connection stays open.
+   * Resulting events go to everyone in the room, the caller included.
+   */
+  private async handleRequest(conn: Connection, data: ConnectionData, message: RequestMessage): Promise<void> {
+    const respondError = (code: ErrorCode, text: string) =>
+      this.send(conn, data, { type: "response", id: message.id, ok: false, error: { code, message: text } });
+    if (!Threads.handles(message.method)) {
+      respondError("not_found", `Unknown method ${message.method}`);
+      return;
+    }
+    try {
+      const outcome = await this.threads.handle(message.method, message.params, { user: data.user!, access: data.access! });
+      this.send(conn, data, { type: "response", id: message.id, ok: true, result: outcome.result });
+      for (const event of outcome.events) this.broadcastEvent(event.name, event.data);
+    } catch (error) {
+      if (error instanceof RequestFailure) {
+        respondError(error.code, error.message);
+      } else {
+        this.onError?.(error, this);
+        respondError("internal", "Something went wrong on the server");
+      }
+    }
+  }
+
+  private broadcastEvent(name: string, eventData: unknown): void {
+    const frame = encodeMessage({ type: "event", name, data: eventData });
+    for (const [conn, data] of this.connections) {
+      if (data.phase === "ready") this.sendFrame(conn, data, frame);
+    }
   }
 
   /** Whether an update holds anything the document doesn't already have. */

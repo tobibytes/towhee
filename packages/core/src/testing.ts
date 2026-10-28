@@ -1,3 +1,4 @@
+import type { Thread } from "@towhee/protocol";
 import * as Y from "yjs";
 import type { Storage } from "./storage";
 
@@ -74,6 +75,46 @@ export function storageSuite(name: string, create: () => Storage | Promise<Stora
       await storage.appendUpdate("r1", update);
       update.fill(0);
       expect(text(await storage.loadDocument("r1"))).toBe("safe");
+    });
+
+    it("stores, lists, replaces and deletes threads per room", async () => {
+      const storage = await create();
+      const thread = (id: string, createdAt: number): Thread => ({
+        id,
+        resolved: false,
+        createdBy: "u1",
+        createdAt,
+        updatedAt: createdAt,
+        comments: [
+          {
+            id: `c-${id}`,
+            threadId: id,
+            author: { id: "u1", name: "Zoë" },
+            body: { version: 1, content: [{ type: "paragraph", children: [{ type: "text", text: "héllo 👋" }] }] },
+            reactions: { "👍": ["u2"] },
+            createdAt,
+          },
+        ],
+      });
+      expect(await storage.threads.list("r1")).toEqual([]);
+      expect(await storage.threads.get("r1", "t1")).toBeNull();
+      await storage.threads.put("r1", thread("t2", 2));
+      await storage.threads.put("r1", thread("t1", 1));
+      await storage.threads.put("r2", thread("t3", 3));
+      expect((await storage.threads.list("r1")).map((t) => t.id)).toEqual(["t1", "t2"]); // oldest first
+      expect(await storage.threads.count("r1")).toBe(2);
+      expect(await storage.threads.get("r1", "t1")).toEqual(thread("t1", 1));
+      expect(await storage.threads.get("r1", "t3")).toBeNull(); // other room
+
+      const changed = { ...thread("t1", 1), resolved: true, updatedAt: 9 };
+      await storage.threads.put("r1", changed);
+      expect(await storage.threads.get("r1", "t1")).toEqual(changed);
+      expect(await storage.threads.count("r1")).toBe(2);
+
+      await storage.threads.delete("r1", "t1");
+      expect(await storage.threads.get("r1", "t1")).toBeNull();
+      expect((await storage.threads.list("r1")).map((t) => t.id)).toEqual(["t2"]);
+      expect(await storage.threads.count("r2")).toBe(1);
     });
 
     it("stores large documents", async () => {
