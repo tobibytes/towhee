@@ -1,5 +1,5 @@
-import type { ConnectionState, Storage, ThreadStore, VersionStore } from "@towhee/core";
-import type { Thread, Version } from "@towhee/protocol";
+import type { ConnectionState, InboxStore, Storage, ThreadStore, VersionStore } from "@towhee/core";
+import type { Notification, Thread, Version } from "@towhee/protocol";
 import * as Y from "yjs";
 
 /**
@@ -21,6 +21,7 @@ export class DurableObjectSqlStorage implements Storage {
   private readonly sql: SqlStorage;
   readonly threads: ThreadStore;
   readonly versions: VersionStore;
+  readonly inbox: InboxStore;
 
   constructor(private readonly storage: DurableObjectStorage) {
     this.sql = storage.sql;
@@ -33,7 +34,10 @@ export class DurableObjectSqlStorage implements Storage {
       CREATE TABLE IF NOT EXISTS towhee_threads (room TEXT NOT NULL, id TEXT NOT NULL, created_at REAL NOT NULL, data TEXT NOT NULL, PRIMARY KEY (room, id));
       CREATE TABLE IF NOT EXISTS towhee_versions (room TEXT NOT NULL, id TEXT NOT NULL, created_at REAL NOT NULL, info TEXT NOT NULL, PRIMARY KEY (room, id));
       CREATE TABLE IF NOT EXISTS towhee_version_chunks (room TEXT NOT NULL, id TEXT NOT NULL, chunk INTEGER NOT NULL, data BLOB NOT NULL, PRIMARY KEY (room, id, chunk));
+      CREATE TABLE IF NOT EXISTS towhee_notifications (scope TEXT NOT NULL, user_id TEXT NOT NULL, id TEXT NOT NULL, created_at REAL NOT NULL, read_at REAL, data TEXT NOT NULL, PRIMARY KEY (scope, user_id, id));
+      CREATE INDEX IF NOT EXISTS towhee_notifications_by_user ON towhee_notifications (scope, user_id, created_at);
     `);
+    this.inbox = new SqlInboxStore(this.sql);
     this.threads = new SqlThreadStore(this.sql);
     this.versions = new SqlVersionStore(this.sql, storage);
   }
@@ -91,6 +95,57 @@ export class DurableObjectSqlStorage implements Storage {
 
   setMeta(key: string, value: string): void {
     this.sql.exec("INSERT INTO towhee_meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value", key, value);
+  }
+}
+
+/** Notifications as JSON, with the read time in its own column. */
+class SqlInboxStore implements InboxStore {
+  constructor(private readonly sql: SqlStorage) {}
+
+  async add(scope: string, userId: string, n: Notification): Promise<void> {
+    const { readAt, ...rest } = n;
+    this.sql.exec(
+      "INSERT OR IGNORE INTO towhee_notifications (scope, user_id, id, created_at, read_at, data) VALUES (?, ?, ?, ?, ?, ?)",
+      scope,
+      userId,
+      n.id,
+      n.createdAt,
+      readAt ?? null,
+      JSON.stringify(rest),
+    );
+  }
+
+  async list(scope: string, userId: string, limit: number): Promise<Notification[]> {
+    return this.sql
+      .exec("SELECT data, read_at FROM towhee_notifications WHERE scope = ? AND user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?", scope, userId, limit)
+      .toArray()
+      .map((r) => ({ ...(JSON.parse(r.data as string) as Notification), ...(r.read_at === null ? {} : { readAt: r.read_at as number }) }));
+  }
+
+  async unreadCount(scope: string, userId: string): Promise<number> {
+    return Number(this.sql.exec("SELECT count(*) AS n FROM towhee_notifications WHERE scope = ? AND user_id = ? AND read_at IS NULL", scope, userId).one().n);
+  }
+
+  async markRead(scope: string, userId: string, ids: readonly string[] | "all", at: number): Promise<string[]> {
+    const unread = this.sql
+      .exec("SELECT id FROM towhee_notifications WHERE scope = ? AND user_id = ? AND read_at IS NULL", scope, userId)
+      .toArray()
+      .map((r) => r.id as string);
+    const changed = ids === "all" ? unread : unread.filter((id) => ids.includes(id));
+    for (const id of changed) this.sql.exec("UPDATE towhee_notifications SET read_at = ? WHERE scope = ? AND user_id = ? AND id = ?", at, scope, userId, id);
+    return changed;
+  }
+
+  async prune(scope: string, userId: string, keep: number): Promise<void> {
+    this.sql.exec(
+      `DELETE FROM towhee_notifications WHERE scope = ? AND user_id = ? AND rowid NOT IN (
+         SELECT rowid FROM towhee_notifications WHERE scope = ? AND user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?)`,
+      scope,
+      userId,
+      scope,
+      userId,
+      keep,
+    );
   }
 }
 

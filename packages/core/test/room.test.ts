@@ -2,7 +2,7 @@ import { encodeMessage, ERROR_CODES, MESSAGE_TYPES, PROTOCOL_VERSION } from "@to
 import { afterEach, describe, expect, it } from "vitest";
 import { encodeAwarenessUpdate } from "y-protocols/awareness";
 import * as Y from "yjs";
-import { decodePresence, encodePresence, MemoryStorage, MemoryThreadStore, MemoryVersionStore, Room, type Storage } from "../src";
+import { decodePresence, encodePresence, MemoryInboxStore, MemoryStorage, MemoryThreadStore, MemoryVersionStore, Room, type Storage } from "../src";
 import { storageSuite } from "../src/testing";
 import { key, type Setup, setup } from "./harness";
 
@@ -446,6 +446,7 @@ describe("persistence", () => {
       compact: async () => {},
       threads: new MemoryThreadStore(),
       versions: new MemoryVersionStore(),
+      inbox: new MemoryInboxStore(),
     };
     const errors: unknown[] = [];
     const s = await start({ storage, onError: (e) => errors.push(e) });

@@ -30,6 +30,8 @@ TOWHEE_SECRET=... npx towhee
 | `TOWHEE_MAX_CONNECTIONS` | `100` | Per room |
 | `TOWHEE_MAX_MESSAGE_BYTES` | `1048576` | |
 | `TOWHEE_MAX_DOCUMENT_BYTES` | `52428800` | |
+| `TOWHEE_WEBHOOK_URL` | | POST each notification to your app |
+| `TOWHEE_WEBHOOK_SECRET` | | Signs webhooks (at least 32 characters); check them with `verifyWebhook` |
 
 ## In code
 

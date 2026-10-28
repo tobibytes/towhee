@@ -3,8 +3,16 @@
   "name": "towhee-test",
   "main": "test/worker.ts",
   "compatibility_date": "2026-10-01",
-  "durable_objects": { "bindings": [{ "name": "TOWHEE_ROOMS", "class_name": "TowheeRoom" }] },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TowheeRoom"] }],
+  "durable_objects": {
+    "bindings": [
+      { "name": "TOWHEE_ROOMS", "class_name": "TowheeRoom" },
+      { "name": "TOWHEE_INBOXES", "class_name": "TowheeInbox" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["TowheeRoom"] },
+    { "tag": "v2", "new_sqlite_classes": ["TowheeInbox"] }
+  ],
   "vars": {
     // A dummy test key, not a real secret.
     "TOWHEE_SECRET": "cloudflare-test-key-not-a-secret-0000",

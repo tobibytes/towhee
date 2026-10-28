@@ -1,10 +1,12 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createRoomToken, type RoomKey, type RoomTokenInput } from "@towhee/auth";
+import { createServer as createHttpServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import { createInboxToken, createRoomToken, type RoomKey, type RoomTokenInput, verifyWebhook } from "@towhee/auth";
 import { createClient, type RoomConnection } from "@towhee/client";
 import { storageSuite } from "@towhee/core/testing";
-import { ERROR_CODES } from "@towhee/protocol";
+import { ERROR_CODES, INBOX_ROOM } from "@towhee/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
 import * as Y from "yjs";
@@ -153,6 +155,65 @@ describe("server", () => {
     expect((await c.history.refresh()).map((v) => v.kind)).toEqual(expect.arrayContaining(["restore", "manual"]));
   });
 
+  it("delivers notifications to inboxes live, signs webhooks, and keeps them through a restart", async () => {
+    // The app's webhook endpoint.
+    const hooks: { body: string; timestamp: string; signature: string }[] = [];
+    const hookServer = createHttpServer((req, res) => {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        hooks.push({ body, timestamp: String(req.headers["x-towhee-timestamp"]), signature: String(req.headers["x-towhee-signature"]) });
+        res.writeHead(204).end();
+      });
+    });
+    await new Promise<void>((resolve) => hookServer.listen(0, "127.0.0.1", resolve));
+    cleanups.push(() => new Promise<void>((resolve) => hookServer.close(() => resolve())));
+    const hookUrl = `http://127.0.0.1:${(hookServer.address() as AddressInfo).port}/towhee`;
+    const webhook = { url: hookUrl, secret: "h".repeat(32) };
+
+    const dir = tempDir();
+    const first = await start(join(dir, "db.sqlite"), 0, { webhook });
+    const signIn = (url: string, userId: string) =>
+      createClient({
+        url,
+        authEndpoint: (room) =>
+          room === INBOX_ROOM ? createInboxToken({ userId }, key) : createRoomToken({ userId, room, access: "write" }, key),
+        reconnect: { initialDelayMs: 20, maxDelayMs: 100 },
+      });
+    const ada = signIn(first.url, "ada").enter("doc:1");
+    const inbox = signIn(first.url, "bob").inbox;
+    cleanups.push(() => ada.leave(), () => inbox.close());
+    await until(() => ada.synced && inbox.ready, "sync and inbox");
+    const mention = { version: 1 as const, content: [{ type: "paragraph" as const, children: [{ type: "mention" as const, userId: "bob" }, { type: "text" as const, text: " look" }] }] };
+    const thread = await ada.threads.create({ body: mention });
+    await until(() => inbox.unread === 1, "live notification");
+    expect(inbox.list()[0]).toMatchObject({ kind: "mention", threadId: thread.id, actor: { id: "ada" } });
+
+    await until(() => hooks.length === 1, "webhook");
+    expect(await verifyWebhook(webhook.secret, hooks[0]!)).toBe(true);
+    expect(JSON.parse(hooks[0]!.body)).toMatchObject({ type: "notification", userId: "bob", scope: "*", notification: { threadId: thread.id } });
+
+    await first.stop();
+    const second = await start(join(dir, "db.sqlite"), first.port, { webhook });
+    const again = signIn(second.url, "bob").inbox;
+    cleanups.push(() => again.close());
+    await until(() => again.ready, "inbox after restart");
+    expect(again.unread).toBe(1);
+  });
+
+  it("refuses inbox paths without a valid user id, and room ids reserved for inboxes", async () => {
+    const { url } = await start(join(tempDir(), "db.sqlite"));
+    for (const path of ["/v1/inbox/", "/v1/inbox/%E0%A4%A", "/v1/rooms/towhee.inbox", "/v1/rooms/talvra:towhee.inbox"]) {
+      const status = await new Promise<number>((resolve) => {
+        const ws = new WebSocket(`${url}${path}`);
+        ws.on("unexpected-response", (_req, res) => resolve(res.statusCode ?? 0));
+        ws.on("open", () => resolve(101));
+        ws.on("error", () => {});
+      });
+      expect(status, path).not.toBe(101);
+    }
+  });
+
   it("refuses bad tokens", async () => {
     const { url } = await start(join(tempDir(), "db.sqlite"));
     const client = createClient({ url, authEndpoint: async () => "bad.token.here" });
@@ -231,6 +292,12 @@ describe("configFromEnv", () => {
     expect(many.server.dataPath).toBe("/data/x.sqlite");
     expect(many.server.limits).toEqual({ maxConnections: 10 });
     expect(configFromEnv({ TOWHEE_SECRET: "s".repeat(32), PORT: "9000", TOWHEE_PORT: "7000" }).port).toBe(7000);
+  });
+
+  it("reads the webhook settings", () => {
+    const config = configFromEnv({ TOWHEE_SECRET: "s".repeat(32), TOWHEE_WEBHOOK_URL: "https://app/hooks", TOWHEE_WEBHOOK_SECRET: "w".repeat(32) });
+    expect(config.server.webhook).toEqual({ url: "https://app/hooks", secret: "w".repeat(32) });
+    expect(() => configFromEnv({ TOWHEE_SECRET: "s".repeat(32), TOWHEE_WEBHOOK_URL: "https://app/hooks" })).toThrow(/TOWHEE_WEBHOOK_SECRET/);
   });
 
   it("explains what's wrong", () => {

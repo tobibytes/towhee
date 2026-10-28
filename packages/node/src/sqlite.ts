@@ -1,8 +1,8 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
-import type { Storage, ThreadStore, VersionStore } from "@towhee/core";
-import type { Thread, Version } from "@towhee/protocol";
+import type { InboxStore, Storage, ThreadStore, VersionStore } from "@towhee/core";
+import type { Notification, Thread, Version } from "@towhee/protocol";
 import * as Y from "yjs";
 
 /**
@@ -13,6 +13,7 @@ export class SqliteStorage implements Storage {
   readonly db: DatabaseSync;
   readonly threads: ThreadStore;
   readonly versions: VersionStore;
+  readonly inbox: InboxStore;
   private readonly statements: {
     state: StatementSync;
     log: StatementSync;
@@ -33,7 +34,10 @@ export class SqliteStorage implements Storage {
       CREATE INDEX IF NOT EXISTS updates_by_room ON updates (room, id);
       CREATE TABLE IF NOT EXISTS threads (room TEXT NOT NULL, id TEXT NOT NULL, created_at REAL NOT NULL, data TEXT NOT NULL, PRIMARY KEY (room, id)) STRICT;
       CREATE TABLE IF NOT EXISTS versions (room TEXT NOT NULL, id TEXT NOT NULL, created_at REAL NOT NULL, info TEXT NOT NULL, state BLOB NOT NULL, PRIMARY KEY (room, id)) STRICT;
+      CREATE TABLE IF NOT EXISTS notifications (scope TEXT NOT NULL, user_id TEXT NOT NULL, id TEXT NOT NULL, created_at REAL NOT NULL, read_at REAL, data TEXT NOT NULL, PRIMARY KEY (scope, user_id, id)) STRICT;
+      CREATE INDEX IF NOT EXISTS notifications_by_user ON notifications (scope, user_id, created_at);
     `);
+    this.inbox = new SqliteInboxStore(this.db);
     this.threads = new SqliteThreadStore(this.db);
     this.versions = new SqliteVersionStore(this.db);
     this.statements = {
@@ -71,6 +75,51 @@ export class SqliteStorage implements Storage {
 
   close(): void {
     this.db.close();
+  }
+}
+
+/** Notifications as JSON, with the read time in its own column. */
+class SqliteInboxStore implements InboxStore {
+  constructor(private readonly db: DatabaseSync) {}
+
+  async add(scope: string, userId: string, n: Notification): Promise<void> {
+    const { readAt, ...rest } = n;
+    this.db
+      .prepare("INSERT OR IGNORE INTO notifications (scope, user_id, id, created_at, read_at, data) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(scope, userId, n.id, n.createdAt, readAt ?? null, JSON.stringify(rest));
+  }
+
+  async list(scope: string, userId: string, limit: number): Promise<Notification[]> {
+    const rows = this.db
+      .prepare("SELECT data, read_at FROM notifications WHERE scope = ? AND user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?")
+      .all(scope, userId, limit) as { data: string; read_at: number | null }[];
+    return rows.map((r) => ({ ...(JSON.parse(r.data) as Notification), ...(r.read_at === null ? {} : { readAt: r.read_at }) }));
+  }
+
+  async unreadCount(scope: string, userId: string): Promise<number> {
+    const row = this.db.prepare("SELECT count(*) AS n FROM notifications WHERE scope = ? AND user_id = ? AND read_at IS NULL").get(scope, userId) as {
+      n: number | bigint;
+    };
+    return Number(row.n);
+  }
+
+  async markRead(scope: string, userId: string, ids: readonly string[] | "all", at: number): Promise<string[]> {
+    const unread = (
+      this.db.prepare("SELECT id FROM notifications WHERE scope = ? AND user_id = ? AND read_at IS NULL").all(scope, userId) as { id: string }[]
+    ).map((r) => r.id);
+    const changed = ids === "all" ? unread : unread.filter((id) => ids.includes(id));
+    const mark = this.db.prepare("UPDATE notifications SET read_at = ? WHERE scope = ? AND user_id = ? AND id = ?");
+    for (const id of changed) mark.run(at, scope, userId, id);
+    return changed;
+  }
+
+  async prune(scope: string, userId: string, keep: number): Promise<void> {
+    this.db
+      .prepare(
+        `DELETE FROM notifications WHERE scope = ? AND user_id = ? AND rowid NOT IN (
+           SELECT rowid FROM notifications WHERE scope = ? AND user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?)`,
+      )
+      .run(scope, userId, scope, userId, keep);
   }
 }
 

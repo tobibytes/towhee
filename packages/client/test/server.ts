@@ -1,5 +1,6 @@
-import { createRoomToken, type RoomKey, type RoomTokenInput } from "@towhee/auth";
-import { type Connection, MemoryStorage, Room } from "@towhee/core";
+import { createInboxToken, createRoomToken, type RoomKey, type RoomTokenInput } from "@towhee/auth";
+import { type Connection, Inbox, MemoryStorage, Room } from "@towhee/core";
+import { INBOX_ROOM } from "@towhee/protocol";
 import type { SocketFactory, SocketLike, Timers } from "../src";
 
 export const key: RoomKey = { id: "test", secret: "c".repeat(32) };
@@ -71,17 +72,41 @@ export class TestServer {
   readonly storage = new MemoryStorage();
   readonly time = new ManualTime();
   readonly rooms = new Map<string, Promise<Room>>();
+  readonly inboxes = new Map<string, Inbox>();
   readonly sockets = new Set<FakeSocket>();
   readonly urls: string[] = [];
   private users = 0;
 
+  /** A room token, or an inbox token when the client asks for the inbox room. */
   token = (input: Partial<RoomTokenInput> = {}) =>
-    track(createRoomToken({ userId: `user-${++this.users}`, room: "doc:1", access: "write", ...input }, key, { now: this.time.current }));
+    input.room === INBOX_ROOM
+      ? track(createInboxToken({ userId: input.userId ?? `user-${++this.users}` }, key, { now: this.time.current }))
+      : track(createRoomToken({ userId: `user-${++this.users}`, room: "doc:1", access: "write", ...input }, key, { now: this.time.current }));
+
+  inbox(userId: string): Inbox {
+    let inbox = this.inboxes.get(userId);
+    if (!inbox) {
+      inbox = Inbox.create({ userId, store: this.storage.inbox, keys: key, now: this.time.now, timers: this.time });
+      this.inboxes.set(userId, inbox);
+    }
+    return inbox;
+  }
 
   room(id: string): Promise<Room> {
     let room = this.rooms.get(id);
     if (!room) {
-      room = track(Room.load({ id, storage: this.storage, keys: key, now: this.time.now, timers: this.time }));
+      room = track(
+        Room.load({
+          id,
+          storage: this.storage,
+          keys: key,
+          now: this.time.now,
+          timers: this.time,
+          onNotify: (scope, deliveries) => {
+            for (const d of deliveries) void track(this.inbox(d.userId).deliver(scope, d.notification));
+          },
+        }),
+      );
       this.rooms.set(id, room);
     }
     return room;
@@ -103,6 +128,7 @@ export class TestServer {
   }
 
   async close(): Promise<void> {
+    for (const inbox of this.inboxes.values()) inbox.close();
     for (const room of this.rooms.values()) await (await room).close();
   }
 }
@@ -114,7 +140,7 @@ export class FakeSocket implements SocketLike {
   onmessage: SocketLike["onmessage"] = null;
   onclose: SocketLike["onclose"] = null;
   onerror: SocketLike["onerror"] = null;
-  private room?: Room;
+  private room?: Pick<Room, "connect" | "receive" | "disconnect">;
   private readonly conn: Connection;
 
   constructor(
@@ -133,9 +159,13 @@ export class FakeSocket implements SocketLike {
       },
       close: (code, reason) => this.finish(code, reason),
     };
+    const inbox = /\/v1\/inbox\/([^/]+)$/.exec(url);
     const match = /\/v1\/rooms\/([^/]+)$/.exec(url);
-    if (!match) throw new Error(`Unexpected URL ${url}`);
-    void track(server.room(decodeURIComponent(match[1]!))).then((room) => {
+    if (!match && !inbox) throw new Error(`Unexpected URL ${url}`);
+    const target: Promise<Pick<Room, "connect" | "receive" | "disconnect">> = inbox
+      ? Promise.resolve(server.inbox(decodeURIComponent(inbox[1]!)))
+      : server.room(decodeURIComponent(match![1]!));
+    void track(target).then((room) => {
       if (this.readyState !== 0) return;
       this.room = room;
       this.readyState = 1;

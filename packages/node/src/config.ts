@@ -16,7 +16,13 @@ export interface EnvConfig {
  * - `TOWHEE_DATA`: SQLite file (default `./data/towhee.sqlite`)
  * - `PORT` or `TOWHEE_PORT` (default 8080), `TOWHEE_HOST` (default 0.0.0.0)
  * - `TOWHEE_UNLOAD_AFTER_MS`, `TOWHEE_MAX_CONNECTIONS`, `TOWHEE_MAX_MESSAGE_BYTES`, `TOWHEE_MAX_DOCUMENT_BYTES`
+ * - `TOWHEE_WEBHOOK_URL` and `TOWHEE_WEBHOOK_SECRET`: POST each notification to your app, signed
  */
+function requireWebhookSecret(secret: string | undefined): string {
+  if (!secret || secret.length < 32) throw new Error("TOWHEE_WEBHOOK_URL needs TOWHEE_WEBHOOK_SECRET (at least 32 characters)");
+  return secret;
+}
+
 export function configFromEnv(env: Record<string, string | undefined>): EnvConfig {
   let keys: RoomKey[];
   if (env.TOWHEE_KEYS) {
@@ -55,6 +61,7 @@ export function configFromEnv(env: Record<string, string | undefined>): EnvConfi
       dataPath: env.TOWHEE_DATA || "./data/towhee.sqlite",
       limits,
       unloadAfterMs: number("TOWHEE_UNLOAD_AFTER_MS"),
+      ...(env.TOWHEE_WEBHOOK_URL ? { webhook: { url: env.TOWHEE_WEBHOOK_URL, secret: requireWebhookSecret(env.TOWHEE_WEBHOOK_SECRET) } } : {}),
     },
     port: number("TOWHEE_PORT", number("PORT", 8080))!,
     host: env.TOWHEE_HOST || "0.0.0.0",

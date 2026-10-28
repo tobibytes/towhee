@@ -7,10 +7,20 @@
   "name": "towhee",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
-  "durable_objects": { "bindings": [{ "name": "TOWHEE_ROOMS", "class_name": "TowheeRoom" }] },
-  // new_sqlite_classes: rooms keep their documents in Durable Object SQLite.
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TowheeRoom"] }],
+  "durable_objects": {
+    "bindings": [
+      { "name": "TOWHEE_ROOMS", "class_name": "TowheeRoom" },
+      { "name": "TOWHEE_INBOXES", "class_name": "TowheeInbox" }
+    ]
+  },
+  // new_sqlite_classes: rooms and inboxes keep their data in Durable Object SQLite.
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["TowheeRoom"] },
+    { "tag": "v2", "new_sqlite_classes": ["TowheeInbox"] }
+  ],
   "vars": {
+    // Optional: POST each notification to your app (also `wrangler secret put TOWHEE_WEBHOOK_SECRET`).
+    // "TOWHEE_WEBHOOK_URL": "https://your-app.example/api/towhee-webhook",
     // Optional limits (defaults in parentheses):
     // "TOWHEE_MAX_CONNECTIONS": "100",
     // "TOWHEE_MAX_MESSAGE_BYTES": "1048576",

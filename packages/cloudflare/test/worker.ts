@@ -1,1 +1,1 @@
-export { default, TowheeRoom } from "../src";
+export { default, TowheeInbox, TowheeRoom } from "../src";
