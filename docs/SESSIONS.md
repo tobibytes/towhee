@@ -77,10 +77,10 @@ A session is done when its "Done when" list is true, CI is green and the PR is m
 
 ## 8. Notifications
 
-- [ ] Inbox per user across rooms (Durable Object per user on Cloudflare, a table on Node)
-- [ ] Notifications for mentions and replies; read and unread; mark all read
-- [ ] Live delivery over `/v1/inbox`; signed webhook to the app
-- [ ] Client API: `client.inbox`
+- [x] Inbox per user across rooms (Durable Object per user on Cloudflare, a table on Node)
+- [x] Notifications for mentions and replies; read and unread; mark all read
+- [x] Live delivery over `/v1/inbox`; signed webhook to the app
+- [x] Client API: `client.inbox`
 
 **Done when:** mentioning a user puts a notification in their inbox live, in both hosts; read state syncs across their tabs; the webhook arrives with a valid signature and retries on failure.
 

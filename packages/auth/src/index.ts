@@ -1,4 +1,5 @@
 export {
+  createInboxToken,
   createRoomToken,
   DEFAULT_EXPIRES_IN,
   generateSecret,
@@ -13,3 +14,4 @@ export {
   validateRoomKeys,
   verifyRoomToken,
 } from "./token";
+export { signWebhook, verifyWebhook, type WebhookToVerify } from "./webhook";

@@ -33,6 +33,13 @@ function durableStorage(): Storage {
       get: (room, id) => call((s) => s.versions.get(room, id)),
       delete: (room, id) => call((s) => s.versions.delete(room, id)),
     },
+    inbox: {
+      add: (scope, userId, n) => call((s) => s.inbox.add(scope, userId, n)),
+      list: (scope, userId, limit) => call((s) => s.inbox.list(scope, userId, limit)),
+      unreadCount: (scope, userId) => call((s) => s.inbox.unreadCount(scope, userId)),
+      markRead: (scope, userId, ids, at) => call((s) => s.inbox.markRead(scope, userId, ids, at)),
+      prune: (scope, userId, keep) => call((s) => s.inbox.prune(scope, userId, keep)),
+    },
     threads: {
       list: (room) => call((s) => s.threads.list(room)),
       get: (room, id) => call((s) => s.threads.get(room, id)),
@@ -165,6 +172,40 @@ describe("rooms on Durable Objects", () => {
     await until(() => c.synced, "sync after eviction");
     expect(text(c)).toBe("version one");
     expect((await c.history.refresh()).map((v) => v.kind)).toEqual(expect.arrayContaining(["restore", "manual"]));
+  });
+
+  it("delivers notifications to a user's inbox object, live and after it hibernates", async () => {
+    const { createClient } = await import("@towhee/client");
+    const { createInboxToken, createRoomToken } = await import("@towhee/auth");
+    const { WorkerSocket, key } = await import("./helpers");
+    const signIn = (userId: string) =>
+      createClient({
+        url: "ws://towhee.test",
+        authEndpoint: (room) => (room === "towhee.inbox" ? createInboxToken({ userId }, key) : createRoomToken({ userId, room, access: "write" }, key)),
+        WebSocket: WorkerSocket,
+      });
+    const ada = signIn("ada").enter("cf:notify");
+    const inbox = signIn("bob").inbox;
+    left.push(ada, { leave: () => inbox.close() });
+    await until(() => ada.synced && inbox.ready, "sync and inbox");
+    const mention = { version: 1 as const, content: [{ type: "paragraph" as const, children: [{ type: "mention" as const, userId: "bob" }, { type: "text" as const, text: " hi" }] }] };
+    const thread = await ada.threads.create({ body: mention });
+    await until(() => inbox.unread === 1, "live notification");
+    expect(inbox.list()[0]).toMatchObject({ kind: "mention", room: "cf:notify", threadId: thread.id, actor: { id: "ada" } });
+
+    await evictDurableObject(env.TOWHEE_INBOXES!.getByName("inbox:bob"));
+    await ada.threads.reply(thread.id, mention); // wakes the inbox object through the room
+    await until(() => inbox.unread === 2, "notification after the inbox hibernated");
+    await inbox.markAllRead();
+    await until(() => inbox.unread === 0, "read");
+    expect(inbox.connection.status).toBe("connected");
+  });
+
+  it("refuses inbox ids that aren't user ids and room ids reserved for inboxes", async () => {
+    const upgrade = { headers: { Upgrade: "websocket" } };
+    expect((await exports.default.fetch("http://towhee.test/v1/inbox/%E0%A4%A", upgrade)).status).toBe(400);
+    expect((await exports.default.fetch("http://towhee.test/v1/rooms/towhee.inbox", upgrade)).status).toBe(400);
+    expect((await exports.default.fetch("http://towhee.test/v1/rooms/app:towhee.inbox", upgrade)).status).toBe(400);
   });
 
   it("closes connections that never authenticate, from the alarm", async () => {

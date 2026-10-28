@@ -66,3 +66,12 @@ export {
   textBody,
 } from "./comments";
 export { isVersion, MAX_VERSION_NAME_LENGTH, type Version, type VersionKind } from "./history";
+export {
+  INBOX_ROOM,
+  inboxRoomFor,
+  isNotification,
+  isReservedRoomId,
+  MAX_EXCERPT_LENGTH,
+  type Notification,
+  type NotificationKind,
+} from "./notifications";

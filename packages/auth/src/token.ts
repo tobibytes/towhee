@@ -1,5 +1,6 @@
 import {
   type Access,
+  inboxRoomFor,
   isAccess,
   isRoomUserInfo,
   isValidRoomPattern,
@@ -248,6 +249,21 @@ export async function verifyRoomToken(token: string, keys: RoomKey | readonly Ro
     expiresAt: exp * 1000,
     keyId: key.id,
   };
+}
+
+/**
+ * A token that opens one user's inbox (`client.inbox`) and nothing else. It's for the key's
+ * reserved inbox room: `towhee.inbox`, or `talvra:towhee.inbox` for a key covering `talvra:*`.
+ * Return it from your token endpoint when the client asks for room `towhee.inbox`.
+ */
+export function createInboxToken(
+  input: { userId: string; user?: RoomUserInfo; expiresIn?: number },
+  key: RoomKey,
+  options: { now?: number } = {},
+): Promise<string> {
+  const room = inboxRoomFor(checkKey(key).rooms);
+  if (!room) throw new TypeError(`Key "${key.id}" covers a single room, so it can't sign inbox tokens`);
+  return createRoomToken({ ...input, room, access: "read" }, key, options);
 }
 
 /** 32 random bytes as base64url (43 characters), for a key's secret. */

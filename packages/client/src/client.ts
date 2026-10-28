@@ -5,6 +5,7 @@ import {
   type ErrorCode,
   encodeMessage,
   errorCodeFromClose,
+  INBOX_ROOM,
   isValidRoomId,
   PRESENCE_RESEND_EVENT,
   PROTOCOL_VERSION,
@@ -19,6 +20,7 @@ import * as syncProtocol from "y-protocols/sync";
 import * as Y from "yjs";
 import { RequestError } from "./errors";
 import { History } from "./history";
+import { Inbox } from "./inbox";
 import { Threads } from "./threads";
 
 export { RequestError };
@@ -105,8 +107,21 @@ export function createClient(options: ClientOptions): TowheeClient {
   return new TowheeClient(options);
 }
 
+/** The user id inside a token, read without verifying it: only to know which inbox URL to open. */
+function tokenSubject(token: string): string | undefined {
+  try {
+    const payload = token.split(".")[1]!.replace(/-/g, "+").replace(/_/g, "/");
+    const json = new TextDecoder().decode(Uint8Array.from(atob(payload), (c) => c.charCodeAt(0)));
+    const sub = (JSON.parse(json) as { sub?: unknown }).sub;
+    return typeof sub === "string" ? sub : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export class TowheeClient {
   private readonly rooms = new Map<string, RoomConnection>();
+  private inboxApi: Inbox | undefined;
 
   constructor(readonly options: ClientOptions) {
     if (!/^wss?:\/\//.test(options.url)) throw new TypeError("url must start with ws:// or wss://");
@@ -124,6 +139,19 @@ export class TowheeClient {
       this.rooms.set(roomId, room);
     }
     return room;
+  }
+
+  /**
+   * The signed-in user's notifications, across rooms, kept live. Opens its own connection on first
+   * use: your token endpoint is asked for room `towhee.inbox` and should answer with
+   * `createInboxToken`. `inbox.close()` disconnects it.
+   */
+  get inbox(): Inbox {
+    if (!this.inboxApi) {
+      const connection = new RoomConnection(this, INBOX_ROOM, new Y.Doc(), () => (this.inboxApi = undefined), "inbox");
+      this.inboxApi = new Inbox(connection);
+    }
+    return this.inboxApi;
   }
 
   /** @internal */
@@ -182,13 +210,19 @@ export class RoomConnection {
     readonly id: string,
     doc: Y.Doc,
     private readonly onLeave: () => void,
+    /** `inbox`: a connection to the user's inbox, with no document or presence. */
+    private readonly mode: "room" | "inbox" = "room",
   ) {
     this.doc = doc;
     this.awareness = new Awareness(doc);
     this.timers = client.options.timers ?? defaultTimers;
-    this.doc.on("update", this.onDocumentUpdate);
-    this.awareness.on("update", this.onPresenceUpdate);
-    this.awareness.on("change", this.onPresenceChange);
+    if (mode === "inbox") {
+      this.awareness.destroy(); // no presence in an inbox; stops its renewal timer
+    } else {
+      this.doc.on("update", this.onDocumentUpdate);
+      this.awareness.on("update", this.onPresenceUpdate);
+      this.awareness.on("change", this.onPresenceChange);
+    }
     // Start on the next microtask so listeners added right after enter() see everything.
     queueMicrotask(() => void this.connect());
   }
@@ -293,7 +327,17 @@ export class RoomConnection {
 
     const SocketClass = this.client.options.WebSocket ?? (globalThis.WebSocket as unknown as SocketFactory);
     const base = this.client.options.url.replace(/\/+$/, "");
-    const socket = new SocketClass(`${base}/v1/rooms/${encodeURIComponent(this.id)}`);
+    let path = `/v1/rooms/${encodeURIComponent(this.id)}`;
+    if (this.mode === "inbox") {
+      const userId = tokenSubject(token);
+      if (!userId) {
+        this.report({ code: "auth_failed", message: "The inbox token couldn't be read" });
+        this.stop();
+        return;
+      }
+      path = `/v1/inbox/${encodeURIComponent(userId)}`;
+    }
+    const socket = new SocketClass(`${base}${path}`);
     socket.binaryType = "arraybuffer";
     this.socket = socket;
     socket.onopen = () => {
@@ -345,6 +389,7 @@ export class RoomConnection {
         this.self = { connectionId: message.connectionId, user: message.user, access: message.access };
         this.emit("self", this.self);
         this.setStatus("connected");
+        if (this.mode === "inbox") return;
         const encoder = encoding.createEncoder();
         syncProtocol.writeSyncStep1(encoder, this.doc);
         this.send({ type: "sync", data: encoding.toUint8Array(encoder) });

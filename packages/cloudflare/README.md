@@ -31,6 +31,8 @@ const token = await createRoomToken({ userId, room, access: "write" }, { id: "de
 | `TOWHEE_MAX_MESSAGE_BYTES` | var | 1048576 |
 | `TOWHEE_MAX_DOCUMENT_BYTES` | var | 52428800 |
 | `TOWHEE_AUTH_TIMEOUT_MS` | var | 10000 |
+| `TOWHEE_WEBHOOK_URL` | var | POST each notification here |
+| `TOWHEE_WEBHOOK_SECRET` | secret | Signs webhooks (at least 32 characters) |
 
 ## How it works
 
@@ -38,3 +40,4 @@ const token = await createRoomToken({ userId, room, access: "write" }, { id: "de
 - Each room runs `@towhee/core` in manual timer mode: no `setTimeout` or `setInterval`, so the object can hibernate. Auth timeouts, token expiry and stale presence are handled by the Durable Object alarm.
 - Each connection's state (user, access, expiry, presence ownership) is stored in SQLite and its id in the socket's attachment. When a hibernated room wakes, it rebuilds its connections from them and asks clients to resend their presence.
 - The compacted document is stored in 1 MB chunks (Durable Object SQLite rows are capped at 2 MB).
+- Each user's inbox is its own Durable Object (`TowheeInbox`, at `/v1/inbox/<user>`). Rooms hand it notifications over RPC; it stores them, shows them live and sends the webhook.

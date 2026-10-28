@@ -1,13 +1,15 @@
 import { type RoomKey, validateRoomKeys } from "@towhee/auth";
-import { type Connection, type Limits, Room } from "@towhee/core";
-import { closeCodeFor, isValidRoomId } from "@towhee/protocol";
+import { type Connection, type ConnectionState, Inbox, type Limits, Room, sendWebhook, type WebhookTarget } from "@towhee/core";
+import { closeCodeFor, isReservedRoomId, isValidRoomId, isValidUserId, type Notification } from "@towhee/protocol";
 import { DurableObject } from "cloudflare:workers";
 import { DurableObjectSqlStorage } from "./storage";
 
-/** Bindings and settings. Secrets (`TOWHEE_SECRET` or `TOWHEE_KEYS`) go in with `wrangler secret put`. */
+/** Bindings and settings. Secrets (`TOWHEE_SECRET` or `TOWHEE_KEYS`, `TOWHEE_WEBHOOK_SECRET`) go in with `wrangler secret put`. */
 export interface TowheeEnv {
   /** Durable Object namespace bound to {@link TowheeRoom}, with a SQLite migration. */
   TOWHEE_ROOMS: DurableObjectNamespace<TowheeRoom>;
+  /** Durable Object namespace bound to {@link TowheeInbox}. Without it, notifications are dropped. */
+  TOWHEE_INBOXES?: DurableObjectNamespace<TowheeInbox>;
   /** One signing key (id `default`) for every room. */
   TOWHEE_SECRET?: string;
   /** Several keys as JSON: `[{"id":"talvra","secret":"...","rooms":"talvra:*"}]`. */
@@ -16,11 +18,19 @@ export interface TowheeEnv {
   TOWHEE_MAX_MESSAGE_BYTES?: string;
   TOWHEE_MAX_DOCUMENT_BYTES?: string;
   TOWHEE_AUTH_TIMEOUT_MS?: string;
+  /** POST each notification here, signed with `TOWHEE_WEBHOOK_SECRET`. */
+  TOWHEE_WEBHOOK_URL?: string;
+  TOWHEE_WEBHOOK_SECRET?: string;
 }
 
-/** The Worker passes the room id to its Durable Object in this header. */
+/** The Worker passes the room id or user id to the Durable Object in these headers. */
 const ROOM_HEADER = "x-towhee-room";
+const USER_HEADER = "x-towhee-user";
 const ROOM_PATH = /^\/v1\/rooms\/([^/]+)$/;
+const INBOX_PATH = /^\/v1\/inbox\/([^/]+)$/;
+
+/** Durable Object name of a user's inbox. */
+const inboxName = (userId: string) => `inbox:${userId}`;
 
 export function keysFromEnv(env: TowheeEnv): RoomKey[] {
   let keys: RoomKey[];
@@ -55,38 +65,70 @@ export function limitsFromEnv(env: TowheeEnv): Partial<Limits> {
   return limits;
 }
 
+export function webhookFromEnv(env: TowheeEnv): WebhookTarget | undefined {
+  if (!env.TOWHEE_WEBHOOK_URL) return undefined;
+  if (!env.TOWHEE_WEBHOOK_SECRET || env.TOWHEE_WEBHOOK_SECRET.length < 32) {
+    throw new Error("TOWHEE_WEBHOOK_URL needs the TOWHEE_WEBHOOK_SECRET secret (at least 32 characters)");
+  }
+  return { url: env.TOWHEE_WEBHOOK_URL, secret: env.TOWHEE_WEBHOOK_SECRET };
+}
+
+function decodeSegment(raw: string): string | undefined {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return undefined; // malformed percent-encoding
+  }
+}
+
 /**
- * The Worker: `GET /health`, and WebSocket upgrades at `/v1/rooms/<room>` routed to that room's
- * Durable Object.
+ * The Worker: `GET /health`, WebSocket upgrades at `/v1/rooms/<room>` routed to that room's
+ * Durable Object, and at `/v1/inbox/<user>` to that user's inbox.
  */
 export async function handleRequest(request: Request, env: TowheeEnv): Promise<Response> {
   const url = new URL(request.url);
   if (url.pathname === "/health" && request.method === "GET") return Response.json({ ok: true });
-  const match = ROOM_PATH.exec(url.pathname);
-  if (!match) return new Response("Not found", { status: 404 });
+  const room = ROOM_PATH.exec(url.pathname);
+  const inbox = INBOX_PATH.exec(url.pathname);
+  if (!room && !inbox) return new Response("Not found", { status: 404 });
   if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
     return new Response("Expected a WebSocket upgrade", { status: 426, headers: { Upgrade: "websocket" } });
   }
-  let roomId: string | undefined;
-  try {
-    roomId = decodeURIComponent(match[1]!);
-  } catch {
-    // Malformed percent-encoding; refused below.
-  }
-  if (!isValidRoomId(roomId)) return new Response("Invalid room id", { status: 400 });
   const headers = new Headers(request.headers);
+  if (inbox) {
+    const userId = decodeSegment(inbox[1]!);
+    if (!isValidUserId(userId)) return new Response("Invalid user id", { status: 400 });
+    if (!env.TOWHEE_INBOXES) return new Response("Inboxes aren't set up (bind TOWHEE_INBOXES)", { status: 404 });
+    headers.set(USER_HEADER, userId);
+    return env.TOWHEE_INBOXES.getByName(inboxName(userId)).fetch(new Request(request, { headers }));
+  }
+  const roomId = decodeSegment(room![1]!);
+  if (!isValidRoomId(roomId) || isReservedRoomId(roomId)) return new Response("Invalid room id", { status: 400 });
   headers.set(ROOM_HEADER, roomId);
   return env.TOWHEE_ROOMS.getByName(roomId).fetch(new Request(request, { headers }));
 }
 
+/** What a Durable Object hosts: a room or an inbox, both running in manual timer mode. */
+interface Hosted {
+  connect(conn: Connection): void;
+  receive(conn: Connection, frame: Uint8Array): Promise<void>;
+  disconnect(conn: Connection): void;
+  restore(conn: Connection, state: ConnectionState): void;
+  sweep(): void;
+  nextDeadline(): number | undefined;
+  flush?(): Promise<void>;
+}
+
 /**
- * One room. Uses WebSocket hibernation: between messages the object can be evicted while sockets
- * stay open. The room runs in manual timer mode, an alarm does its sweeps, and each connection's
- * state is kept in SQLite so the room can be rebuilt on wake.
+ * WebSocket hibernation for anything {@link Hosted}. Between messages the object can be evicted
+ * while sockets stay open. Each connection's state is kept in SQLite (its id in the socket's
+ * attachment), so the hosted room or inbox can be rebuilt on wake; an alarm runs its sweeps.
  */
-export class TowheeRoom extends DurableObject<TowheeEnv> {
-  private readonly storage: DurableObjectSqlStorage;
-  private room: Promise<Room> | undefined;
+abstract class SocketHost<Target extends Hosted> extends DurableObject<TowheeEnv> {
+  protected readonly storage: DurableObjectSqlStorage;
+  /** Work the current event must wait for, like notifications sent to inboxes. */
+  protected readonly pending: Promise<unknown>[] = [];
+  private target: Promise<Target> | undefined;
   private readonly sockets = new Map<Connection, WebSocket>();
   private readonly connections = new WeakMap<WebSocket, Connection>();
   private readonly connectionIds = new Map<Connection, string>();
@@ -98,33 +140,22 @@ export class TowheeRoom extends DurableObject<TowheeEnv> {
     this.storage = new DurableObjectSqlStorage(ctx.storage);
   }
 
-  override async fetch(request: Request): Promise<Response> {
-    const roomId = request.headers.get(ROOM_HEADER);
-    if (!isValidRoomId(roomId)) return new Response("Missing room id", { status: 400 });
-    const known = this.storage.getMeta("room");
-    if (known === undefined) this.storage.setMeta("room", roomId);
-    else if (known !== roomId) return new Response("Wrong room", { status: 400 });
-    if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response("Expected a WebSocket upgrade", { status: 426 });
+  /** Builds the hosted room or inbox, passing `onConnectionChange` through. */
+  protected abstract create(onConnectionChange: (conn: Connection, state: ConnectionState | null) => void): Promise<Target>;
 
-    const room = await this.getRoom();
-    const pair = new WebSocketPair();
-    const [client, server] = [pair[0], pair[1]];
-    this.ctx.acceptWebSocket(server);
-    room.connect(this.connection(server));
-    await this.afterEvent(room);
-    return new Response(null, { status: 101, webSocket: client });
-  }
+  /** After sockets were restored on wake. */
+  protected afterRestore(_target: Target, _restored: number): void {}
 
   override async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
-    const room = await this.getRoom();
+    const target = await this.getTarget();
     const conn = this.connection(ws);
     if (typeof message === "string") {
       ws.close(closeCodeFor("protocol_error"), "protocol_error");
-      room.disconnect(conn);
+      target.disconnect(conn);
     } else {
-      await room.receive(conn, new Uint8Array(message));
+      await target.receive(conn, new Uint8Array(message));
     }
-    await this.afterEvent(room);
+    await this.afterEvent(target);
   }
 
   override async webSocketClose(ws: WebSocket, code: number): Promise<void> {
@@ -137,56 +168,74 @@ export class TowheeRoom extends DurableObject<TowheeEnv> {
 
   override async alarm(): Promise<void> {
     this.alarmAt = null;
-    const room = await this.getRoom();
-    room.sweep();
-    await this.afterEvent(room);
+    const target = await this.getTarget();
+    target.sweep();
+    await this.afterEvent(target);
   }
 
-  /* Internals ---------------------------------------------------------------------------------- */
+  /** Accepts a WebSocket upgrade into the hosted room or inbox. */
+  protected async accept(): Promise<Response> {
+    const target = await this.getTarget();
+    const pair = new WebSocketPair();
+    const [client, server] = [pair[0], pair[1]];
+    this.ctx.acceptWebSocket(server);
+    target.connect(this.connection(server));
+    await this.afterEvent(target);
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  protected getTarget(): Promise<Target> {
+    this.target ??= this.load().catch((error: unknown) => {
+      this.target = undefined;
+      throw error;
+    });
+    return this.target;
+  }
+
+  /**
+   * Waits for storage writes and pending work, then makes sure an alarm is set for the next
+   * deadline. Only moves the alarm earlier: presence renewals push the deadline back constantly,
+   * and the alarm reschedules itself when it fires.
+   */
+  protected async afterEvent(target: Target): Promise<void> {
+    await target.flush?.();
+    for (const result of await Promise.allSettled(this.pending.splice(0))) {
+      if (result.status === "rejected") console.error("[towhee]", result.reason);
+    }
+    const next = target.nextDeadline();
+    if (next === undefined) return;
+    if (this.alarmAt === undefined) this.alarmAt = await this.ctx.storage.getAlarm();
+    if (this.alarmAt === null || next < this.alarmAt) {
+      await this.ctx.storage.setAlarm(next);
+      this.alarmAt = next;
+    }
+  }
 
   private async closed(ws: WebSocket, code: number): Promise<void> {
-    const room = await this.getRoom();
-    room.disconnect(this.connection(ws));
+    const target = await this.getTarget();
+    target.disconnect(this.connection(ws));
     try {
       // Completes the close handshake (1005/1006 can't be sent back).
       ws.close(code === 1005 || code === 1006 ? 1000 : code, "closed");
     } catch {
       // Already closed.
     }
-    await this.afterEvent(room);
+    await this.afterEvent(target);
   }
 
-  private getRoom(): Promise<Room> {
-    this.room ??= this.load().catch((error: unknown) => {
-      this.room = undefined;
-      throw error;
-    });
-    return this.room;
-  }
-
-  private async load(): Promise<Room> {
-    const id = this.storage.getMeta("room");
-    if (!id) throw new Error("This Durable Object has no room id yet");
-    const room = await Room.load({
-      id,
-      storage: this.storage,
-      keys: keysFromEnv(this.env),
-      limits: limitsFromEnv(this.env),
-      timers: "manual",
-      onConnectionChange: (conn, state) => {
-        const ws = this.sockets.get(conn);
-        if (state) {
-          this.connectionIds.set(conn, state.id);
-          this.storage.putConnection(state);
-          ws?.serializeAttachment({ id: state.id });
-        } else {
-          const known = this.connectionIds.get(conn);
-          if (known) this.storage.deleteConnection(known);
-          this.connectionIds.delete(conn);
-          this.sockets.delete(conn);
-        }
-      },
-      onError: (error) => console.error(`[towhee] room ${id}:`, error),
+  private async load(): Promise<Target> {
+    const target = await this.create((conn, state) => {
+      const ws = this.sockets.get(conn);
+      if (state) {
+        this.connectionIds.set(conn, state.id);
+        this.storage.putConnection(state);
+        ws?.serializeAttachment({ id: state.id });
+      } else {
+        const known = this.connectionIds.get(conn);
+        if (known) this.storage.deleteConnection(known);
+        this.connectionIds.delete(conn);
+        this.sockets.delete(conn);
+      }
     });
 
     // Sockets that stayed open while this object slept get their connections back.
@@ -199,7 +248,7 @@ export class TowheeRoom extends DurableObject<TowheeEnv> {
       if (state) {
         this.connectionIds.set(conn, state.id);
         open.add(state.id);
-        room.restore(conn, state);
+        target.restore(conn, state);
         restored++;
       } else {
         ws.close(closeCodeFor("internal"), "internal");
@@ -207,9 +256,9 @@ export class TowheeRoom extends DurableObject<TowheeEnv> {
       }
     }
     this.storage.pruneConnections(open);
-    if (restored > 0) room.requestPresence();
+    this.afterRestore(target, restored);
     this.alarmAt = await this.ctx.storage.getAlarm();
-    return room;
+    return target;
   }
 
   private connection(ws: WebSocket): Connection {
@@ -224,21 +273,93 @@ export class TowheeRoom extends DurableObject<TowheeEnv> {
     }
     return conn;
   }
+}
 
-  /**
-   * Waits for storage writes, then makes sure an alarm is set for the room's next deadline. Only
-   * moves the alarm earlier: presence renewals push the deadline back constantly, and the alarm
-   * reschedules itself when it fires.
-   */
-  private async afterEvent(room: Room): Promise<void> {
-    await room.flush();
-    const next = room.nextDeadline();
-    if (next === undefined) return;
-    if (this.alarmAt === undefined) this.alarmAt = await this.ctx.storage.getAlarm();
-    if (this.alarmAt === null || next < this.alarmAt) {
-      await this.ctx.storage.setAlarm(next);
-      this.alarmAt = next;
+/** One room: a shared document, presence, threads and history. */
+export class TowheeRoom extends SocketHost<Room> {
+  override async fetch(request: Request): Promise<Response> {
+    const roomId = request.headers.get(ROOM_HEADER);
+    if (!isValidRoomId(roomId)) return new Response("Missing room id", { status: 400 });
+    const known = this.storage.getMeta("room");
+    if (known === undefined) this.storage.setMeta("room", roomId);
+    else if (known !== roomId) return new Response("Wrong room", { status: 400 });
+    if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response("Expected a WebSocket upgrade", { status: 426 });
+    return this.accept();
+  }
+
+  protected override async create(onConnectionChange: (conn: Connection, state: ConnectionState | null) => void): Promise<Room> {
+    const id = this.storage.getMeta("room");
+    if (!id) throw new Error("This Durable Object has no room id yet");
+    return Room.load({
+      id,
+      storage: this.storage,
+      keys: keysFromEnv(this.env),
+      limits: limitsFromEnv(this.env),
+      timers: "manual",
+      onConnectionChange,
+      onNotify: (scope, deliveries) => this.notify(scope, deliveries),
+      onError: (error) => console.error(`[towhee] room ${id}:`, error),
+    });
+  }
+
+  protected override afterRestore(room: Room, restored: number): void {
+    if (restored > 0) room.requestPresence();
+  }
+
+  /** Hands notifications to the users' inbox objects; the current event waits for them. */
+  private notify(scope: string, deliveries: { userId: string; notification: Notification }[]): void {
+    const inboxes = this.env.TOWHEE_INBOXES;
+    if (!inboxes) return;
+    for (const { userId, notification } of deliveries) {
+      this.pending.push(inboxes.getByName(inboxName(userId)).deliver(userId, scope, notification));
     }
+  }
+}
+
+/** One user's inbox: notifications from every room, live to their open tabs, plus the webhook. */
+export class TowheeInbox extends SocketHost<Inbox> {
+  override async fetch(request: Request): Promise<Response> {
+    const userId = request.headers.get(USER_HEADER);
+    if (!isValidUserId(userId) || !this.claim(userId)) return new Response("Wrong user", { status: 400 });
+    if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response("Expected a WebSocket upgrade", { status: 426 });
+    return this.accept();
+  }
+
+  /** Called by rooms (RPC) to store a notification and show it live. */
+  async deliver(userId: string, scope: string, notification: Notification): Promise<void> {
+    if (!isValidUserId(userId) || !this.claim(userId)) throw new Error("This inbox belongs to another user");
+    const inbox = await this.getTarget();
+    await inbox.deliver(scope, notification);
+  }
+
+  protected override async create(onConnectionChange: (conn: Connection, state: ConnectionState | null) => void): Promise<Inbox> {
+    const userId = this.storage.getMeta("user");
+    if (!userId) throw new Error("This inbox has no user yet");
+    const webhook = webhookFromEnv(this.env);
+    return Inbox.create({
+      userId,
+      store: this.storage.inbox,
+      keys: keysFromEnv(this.env),
+      limits: limitsFromEnv(this.env),
+      timers: "manual",
+      onConnectionChange,
+      onDelivered: (scope, notification) => {
+        if (!webhook) return;
+        this.ctx.waitUntil(
+          sendWebhook(webhook, { type: "notification", userId, scope, notification }).then((ok) => {
+            if (!ok) console.error(`[towhee] webhook for notification ${notification.id} failed`);
+          }),
+        );
+      },
+      onError: (error) => console.error(`[towhee] inbox ${userId}:`, error),
+    });
+  }
+
+  /** Each inbox object belongs to one user, fixed by the first request. */
+  private claim(userId: string): boolean {
+    const known = this.storage.getMeta("user");
+    if (known === undefined) this.storage.setMeta("user", userId);
+    return known === undefined || known === userId;
   }
 }
 

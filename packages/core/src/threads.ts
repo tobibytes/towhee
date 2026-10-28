@@ -1,6 +1,8 @@
 import {
   type Access,
   type Anchor,
+  bodyMentions,
+  bodyText,
   type Comment,
   type CommentBody,
   COMMENT_LIMITS,
@@ -12,6 +14,8 @@ import {
   isCommentBody,
   isReaction,
   isThreadMetadata,
+  MAX_EXCERPT_LENGTH,
+  type Notification,
   type RoomUser,
   type Thread,
   type ThreadMetadata,
@@ -38,6 +42,8 @@ export interface Outcome {
   result: unknown;
   /** Events for everyone in the room, the caller included. */
   events: { name: string; data: unknown }[];
+  /** Notifications for other users' inboxes. */
+  notifications?: { userId: string; notification: Notification }[];
 }
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
@@ -80,6 +86,36 @@ export class Threads {
     private readonly store: ThreadStore,
     private readonly now: () => number,
   ) {}
+
+  /**
+   * Who hears about a new comment: everyone it mentions, then (for replies) everyone who started
+   * or commented in the thread. One notification per person, and never to the author.
+   */
+  private notify(thread: Thread, comment: Comment, mentioned: readonly string[], participants: readonly string[]): Outcome["notifications"] {
+    const author = comment.author.id;
+    const sent = new Set<string>([author]);
+    const out: NonNullable<Outcome["notifications"]> = [];
+    const add = (userId: string, kind: Notification["kind"]) => {
+      if (sent.has(userId)) return;
+      sent.add(userId);
+      out.push({
+        userId,
+        notification: {
+          id: newId("n"),
+          kind,
+          room: this.room,
+          threadId: thread.id,
+          commentId: comment.id,
+          actor: comment.author,
+          excerpt: bodyText(comment.body).slice(0, MAX_EXCERPT_LENGTH),
+          createdAt: comment.editedAt ?? comment.createdAt,
+        },
+      });
+    };
+    for (const userId of mentioned) add(userId, "mention");
+    for (const userId of participants) add(userId, "reply");
+    return out;
+  }
 
   /** Whether this handles `method`. */
   static handles(method: string): boolean {
@@ -148,7 +184,12 @@ export class Threads {
       comments: [this.comment(threadId, first, caller, now)],
     };
     await this.store.put(this.room, thread);
-    return { result: { thread }, events: [{ name: "thread.created", data: { thread } }] };
+    const comment = thread.comments[0]!;
+    return {
+      result: { thread },
+      events: [{ name: "thread.created", data: { thread } }],
+      notifications: this.notify(thread, comment, bodyMentions(comment.body), []),
+    };
   }
 
   private async reply(p: Record<string, unknown>, caller: Caller): Promise<Outcome> {
@@ -159,10 +200,12 @@ export class Threads {
       throw new RequestFailure("forbidden", `A thread can have at most ${COMMENT_LIMITS.commentsPerThread} comments`);
     }
     const now = this.now();
+    const participants = [thread.createdBy, ...thread.comments.filter((c) => c.deletedAt === undefined).map((c) => c.author.id)];
     const comment = this.comment(thread.id, text, caller, now);
     thread.comments.push(comment);
     thread.updatedAt = now;
-    return this.save(thread, { thread, comment });
+    const outcome = await this.save(thread, { thread, comment });
+    return { ...outcome, notifications: this.notify(thread, comment, bodyMentions(text), participants) };
   }
 
   private async editComment(p: Record<string, unknown>, caller: Caller): Promise<Outcome> {
@@ -170,9 +213,13 @@ export class Threads {
     const thread = await this.thread(p.threadId);
     const comment = this.liveComment(thread, p.commentId);
     this.mayChange(caller, comment.author.id, "edit other people's comments");
+    const before = new Set(bodyMentions(comment.body));
     comment.body = body(p.body);
     comment.editedAt = thread.updatedAt = this.now();
-    return this.save(thread, { thread, comment });
+    const outcome = await this.save(thread, { thread, comment });
+    // Only people newly mentioned by the edit hear about it.
+    const added = bodyMentions(comment.body).filter((id) => !before.has(id));
+    return { ...outcome, notifications: this.notify(thread, comment, added, []) };
   }
 
   private async deleteComment(p: Record<string, unknown>, caller: Caller): Promise<Outcome> {

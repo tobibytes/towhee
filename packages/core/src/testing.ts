@@ -1,4 +1,4 @@
-import type { Thread, Version } from "@towhee/protocol";
+import type { Notification, Thread, Version } from "@towhee/protocol";
 import * as Y from "yjs";
 import type { Storage } from "./storage";
 
@@ -154,6 +154,41 @@ export function storageSuite(name: string, create: () => Storage | Promise<Stora
       const state = Y.encodeStateAsUpdate(doc);
       await storage.versions.save("big", { id: "v1", kind: "auto", createdAt: 1, size: state.length }, state);
       expect(text((await storage.versions.get("big", "v1"))!.state).length).toBe(300 * 1024);
+    });
+
+    it("keeps each user's notifications per scope, newest first, with read state", async () => {
+      const storage = await create();
+      const n = (id: string, createdAt: number): Notification => ({
+        id,
+        kind: "mention",
+        room: "doc:1",
+        threadId: "th_1",
+        commentId: `cm_${id}`,
+        actor: { id: "bob", name: "Bób" },
+        excerpt: "hey @ada ✨",
+        createdAt,
+      });
+      await storage.inbox.add("*", "ada", n("n1", 1));
+      await storage.inbox.add("*", "ada", n("n2", 2));
+      await storage.inbox.add("*", "ada", n("n3", 2)); // same millisecond: last added first
+      await storage.inbox.add("talvra:*", "ada", n("n4", 3)); // another app's ada
+      await storage.inbox.add("*", "bob", n("n5", 4));
+      expect((await storage.inbox.list("*", "ada", 10)).map((x) => x.id)).toEqual(["n3", "n2", "n1"]);
+      expect((await storage.inbox.list("*", "ada", 2)).map((x) => x.id)).toEqual(["n3", "n2"]);
+      expect((await storage.inbox.list("talvra:*", "ada", 10)).map((x) => x.id)).toEqual(["n4"]);
+      expect(await storage.inbox.list("*", "ada", 1)).toEqual([n("n3", 2)]);
+      expect(await storage.inbox.unreadCount("*", "ada")).toBe(3);
+
+      expect(await storage.inbox.markRead("*", "ada", ["n1", "n4", "missing"], 50)).toEqual(["n1"]);
+      expect(await storage.inbox.markRead("*", "ada", ["n1"], 60)).toEqual([]); // already read
+      expect((await storage.inbox.list("*", "ada", 10)).find((x) => x.id === "n1")?.readAt).toBe(50);
+      expect((await storage.inbox.markRead("*", "ada", "all", 70)).sort()).toEqual(["n2", "n3"]);
+      expect(await storage.inbox.unreadCount("*", "ada")).toBe(0);
+      expect(await storage.inbox.unreadCount("talvra:*", "ada")).toBe(1);
+
+      await storage.inbox.prune("*", "ada", 1);
+      expect((await storage.inbox.list("*", "ada", 10)).map((x) => x.id)).toEqual(["n3"]);
+      expect((await storage.inbox.list("*", "bob", 10)).map((x) => x.id)).toEqual(["n5"]);
     });
 
     it("stores large documents", async () => {

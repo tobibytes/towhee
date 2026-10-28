@@ -2,8 +2,8 @@ import { createServer as createHttpServer, type IncomingMessage, type Server } f
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
 import type { RoomKey } from "@towhee/auth";
-import { type Connection, type Limits, Room, resolveLimits, type Storage } from "@towhee/core";
-import { closeCodeFor, encodeMessage, isValidRoomId } from "@towhee/protocol";
+import { type Connection, Inbox, type Limits, Room, resolveLimits, type Storage, sendWebhook, type WebhookTarget } from "@towhee/core";
+import { closeCodeFor, encodeMessage, isReservedRoomId, isValidRoomId, isValidUserId, type Notification } from "@towhee/protocol";
 import { type RawData, type WebSocket, WebSocketServer } from "ws";
 import { SqliteStorage } from "./sqlite";
 
@@ -21,6 +21,8 @@ export interface ServerOptions {
   heartbeatMs?: number;
   /** Unexpected errors (storage failures, bugs). Default: logged with console.error. */
   onError?: (error: unknown, room?: string) => void;
+  /** Where to POST each notification, signed with the secret (see `verifyWebhook` in `@towhee/auth`). */
+  webhook?: WebhookTarget;
 }
 
 interface ActiveRoom {
@@ -29,6 +31,7 @@ interface ActiveRoom {
 }
 
 const ROOM_PATH = /^\/v1\/rooms\/([^/?#]+)$/;
+const INBOX_PATH = /^\/v1\/inbox\/([^/?#]+)$/;
 
 function refuseUpgrade(socket: Duplex, status: number, text: string): void {
   socket.end(`HTTP/1.1 ${status} ${text}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
@@ -51,6 +54,9 @@ export class TowheeServer {
   /** Rooms being saved and freed. A room isn't loaded again until its close has finished. */
   private readonly closing = new Map<string, Promise<void>>();
   private readonly alive = new WeakMap<WebSocket, boolean>();
+  /** Inboxes hold no state of their own (it's all in storage), so they live only while used. */
+  private readonly inboxes = new Map<string, Inbox>();
+  private readonly webhook?: WebhookTarget;
   private readonly heartbeat: ReturnType<typeof setInterval>;
   private stopped = false;
 
@@ -62,6 +68,10 @@ export class TowheeServer {
     this.ownsStorage = !options.storage;
     this.unloadAfterMs = options.unloadAfterMs ?? 30_000;
     this.onError = options.onError ?? ((error, room) => console.error(`[towhee]${room ? ` room ${room}:` : ""}`, error));
+    if (options.webhook && (!/^https?:\/\//.test(options.webhook.url) || options.webhook.secret.length < 32)) {
+      throw new TypeError("webhook needs an http(s) url and a secret of at least 32 characters");
+    }
+    this.webhook = options.webhook;
 
     this.wss = new WebSocketServer({
       noServer: true,
@@ -112,6 +122,7 @@ export class TowheeServer {
     this.stopped = true;
     clearInterval(this.heartbeat);
     const httpClosed = new Promise<void>((resolve) => this.http.close(() => resolve()));
+    for (const inbox of this.inboxes.values()) inbox.close();
     for (const id of [...this.active.keys()]) this.unload(id, true);
     await Promise.all(this.closing.values());
     for (const ws of this.wss.clients) ws.terminate();
@@ -127,15 +138,25 @@ export class TowheeServer {
       refuseUpgrade(socket, 503, "Service Unavailable");
       return;
     }
-    const match = ROOM_PATH.exec(new URL(req.url ?? "/", "http://localhost").pathname);
-    let roomId: string | undefined;
-    try {
-      roomId = match ? decodeURIComponent(match[1]!) : undefined;
-    } catch {
-      // Malformed percent-encoding; refused below.
+    const path = new URL(req.url ?? "/", "http://localhost").pathname;
+    const decode = (raw: string) => {
+      try {
+        return decodeURIComponent(raw);
+      } catch {
+        return undefined; // malformed percent-encoding
+      }
+    };
+    const inbox = INBOX_PATH.exec(path);
+    if (inbox) {
+      const userId = decode(inbox[1]!);
+      if (!isValidUserId(userId)) refuseUpgrade(socket, 400, "Bad Request");
+      else this.wss.handleUpgrade(req, socket, head, (ws) => this.attachInbox(ws, userId));
+      return;
     }
+    const match = ROOM_PATH.exec(path);
+    const roomId = match ? decode(match[1]!) : undefined;
     if (!match) refuseUpgrade(socket, 404, "Not Found");
-    else if (!isValidRoomId(roomId)) refuseUpgrade(socket, 400, "Bad Request");
+    else if (!isValidRoomId(roomId) || isReservedRoomId(roomId)) refuseUpgrade(socket, 400, "Bad Request");
     else this.wss.handleUpgrade(req, socket, head, (ws) => this.attach(ws, roomId));
   }
 
@@ -188,6 +209,70 @@ export class TowheeServer {
     );
   }
 
+  private attachInbox(ws: WebSocket, userId: string): void {
+    this.alive.set(ws, true);
+    ws.on("pong", () => this.alive.set(ws, true));
+    const conn: Connection = {
+      send: (frame) => {
+        if (ws.readyState === ws.OPEN) ws.send(frame, { binary: true });
+      },
+      close: (code, reason) => ws.close(code, reason),
+    };
+    const inbox = this.inbox(userId);
+    inbox.connect(conn);
+    ws.on("message", (data: RawData, isBinary: boolean) => {
+      if (!isBinary) {
+        ws.close(closeCodeFor("protocol_error"), "protocol_error");
+        return;
+      }
+      void inbox.receive(conn, toUint8Array(data));
+    });
+    ws.on("close", () => {
+      inbox.disconnect(conn);
+      this.releaseInbox(userId);
+    });
+    ws.on("error", () => {});
+  }
+
+  /* Inboxes ------------------------------------------------------------------------------------ */
+
+  private inbox(userId: string): Inbox {
+    let inbox = this.inboxes.get(userId);
+    if (!inbox) {
+      inbox = Inbox.create({
+        userId,
+        store: this.storage.inbox,
+        keys: this.keys,
+        limits: this.limits,
+        onError: (error) => this.onError(error),
+        onDelivered: (scope, notification) => {
+          const target = this.webhook;
+          if (!target) return;
+          void sendWebhook(target, { type: "notification", userId, scope, notification }).then(
+            (ok) => ok || this.onError(new Error(`Webhook for notification ${notification.id} failed`)),
+            (error) => this.onError(error),
+          );
+        },
+      });
+      this.inboxes.set(userId, inbox);
+    }
+    return inbox;
+  }
+
+  private releaseInbox(userId: string): void {
+    if (this.inboxes.get(userId)?.connectionCount === 0) this.inboxes.delete(userId);
+  }
+
+  private deliver(scope: string, deliveries: { userId: string; notification: Notification }[]): void {
+    for (const { userId, notification } of deliveries) {
+      const inbox = this.inbox(userId);
+      inbox.deliver(scope, notification).then(
+        () => this.releaseInbox(userId),
+        (error: unknown) => this.onError(error),
+      );
+    }
+  }
+
   /* Rooms ------------------------------------------------------------------------------------- */
 
   private room(id: string): Promise<Room> {
@@ -206,6 +291,7 @@ export class TowheeServer {
           keys: this.keys,
           limits: this.limits,
           onEmpty: () => this.scheduleUnload(id),
+          onNotify: (scope, deliveries) => this.deliver(scope, deliveries),
           onError: (error) => this.onError(error, id),
         });
       })(),

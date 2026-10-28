@@ -1,4 +1,4 @@
-import type { Thread, Version } from "@towhee/protocol";
+import type { Notification, Thread, Version } from "@towhee/protocol";
 import * as Y from "yjs";
 
 /**
@@ -18,6 +18,71 @@ export interface Storage {
   threads: ThreadStore;
   /** Saved versions of documents. */
   versions: VersionStore;
+  /** Users' notifications. */
+  inbox: InboxStore;
+}
+
+/**
+ * Notifications per user. `scope` is the room pattern of the key the user's app signs with, so two
+ * apps sharing a deployment keep their users apart even if ids collide.
+ */
+export interface InboxStore {
+  add(scope: string, userId: string, notification: Notification): Promise<void>;
+  /** Newest first, at most `limit`. */
+  list(scope: string, userId: string, limit: number): Promise<Notification[]>;
+  unreadCount(scope: string, userId: string): Promise<number>;
+  /** Marks notifications read at `at`; returns the ids that were unread. */
+  markRead(scope: string, userId: string, ids: readonly string[] | "all", at: number): Promise<string[]>;
+  /** Keeps only the newest `keep` notifications. */
+  prune(scope: string, userId: string, keep: number): Promise<void>;
+}
+
+export class MemoryInboxStore implements InboxStore {
+  private readonly inboxes = new Map<string, Notification[]>();
+
+  private inbox(scope: string, userId: string): Notification[] {
+    const key = `${scope}\u0000${userId}`;
+    let list = this.inboxes.get(key);
+    if (!list) {
+      list = [];
+      this.inboxes.set(key, list);
+    }
+    return list;
+  }
+
+  async add(scope: string, userId: string, notification: Notification): Promise<void> {
+    this.inbox(scope, userId).push(structuredClone(notification));
+  }
+
+  async list(scope: string, userId: string, limit: number): Promise<Notification[]> {
+    return [...this.inbox(scope, userId)]
+      .reverse()
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, limit)
+      .map((n) => structuredClone(n));
+  }
+
+  async unreadCount(scope: string, userId: string): Promise<number> {
+    return this.inbox(scope, userId).filter((n) => n.readAt === undefined).length;
+  }
+
+  async markRead(scope: string, userId: string, ids: readonly string[] | "all", at: number): Promise<string[]> {
+    const changed: string[] = [];
+    for (const n of this.inbox(scope, userId)) {
+      if (n.readAt === undefined && (ids === "all" || ids.includes(n.id))) {
+        n.readAt = at;
+        changed.push(n.id);
+      }
+    }
+    return changed;
+  }
+
+  async prune(scope: string, userId: string, keep: number): Promise<void> {
+    const list = this.inbox(scope, userId);
+    const newest = new Set((await this.list(scope, userId, keep)).map((n) => n.id));
+    const kept = list.filter((n) => newest.has(n.id));
+    list.splice(0, list.length, ...kept);
+  }
 }
 
 /** Versions of a room's document: a description plus the full state. */
@@ -107,6 +172,7 @@ export class MemoryStorage implements Storage {
   private readonly rooms = new Map<string, { state: Uint8Array | null; log: Uint8Array[] }>();
   readonly threads: ThreadStore = new MemoryThreadStore();
   readonly versions: VersionStore = new MemoryVersionStore();
+  readonly inbox: InboxStore = new MemoryInboxStore();
 
   async loadDocument(room: string): Promise<Uint8Array | null> {
     const saved = this.rooms.get(room);

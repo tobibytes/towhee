@@ -7,7 +7,9 @@ import {
   decodeClientMessage,
   type ErrorCode,
   encodeMessage,
+  isReservedRoomId,
   isValidRoomId,
+  type Notification,
   PRESENCE_RESEND_EVENT,
   PROTOCOL_VERSION,
   ProtocolError,
@@ -55,6 +57,11 @@ export interface RoomOptions {
    * rooms while sockets stay open (Durable Object hibernation) store this and pass it to `restore()`.
    */
   onConnectionChange?: (conn: Connection, state: ConnectionState | null) => void;
+  /**
+   * Notifications for users' inboxes (mentions, replies). `scope` is the room pattern of the key
+   * that signed the acting user's token; inboxes are kept per scope.
+   */
+  onNotify?: (scope: string, deliveries: { userId: string; notification: Notification }[]) => void;
   /** Called when the last connection leaves. Hosts usually unload the room after a while. */
   onEmpty?: (room: Room) => void;
   /** Unexpected errors: storage failures and bugs. The affected connections are closed with `internal`. */
@@ -71,12 +78,15 @@ export interface ConnectionState {
   expiresAt?: number;
   /** Awareness client ids the connection owns. */
   presence: number[];
+  /** Room pattern of the key that signed the token. */
+  scope?: string;
 }
 
 interface ConnectionData {
   id: string;
   phase: "pending" | "ready" | "closed";
   connectedAt: number;
+  scope?: string;
   user?: RoomUser;
   access?: Access;
   expiresAt?: number;
@@ -139,6 +149,8 @@ export class Room {
 
   private readonly storage: Storage;
   private readonly keys: RoomKey | readonly RoomKey[];
+  private readonly keyList: readonly RoomKey[];
+  private readonly onNotify?: RoomOptions["onNotify"];
   private readonly now: () => number;
   /** Undefined in manual mode. */
   private readonly timers: Timers | undefined;
@@ -162,6 +174,7 @@ export class Room {
   /** Loads the room's document from storage. Throws a TypeError for an invalid room id or keys. */
   static async load(options: RoomOptions): Promise<Room> {
     if (!isValidRoomId(options.id)) throw new TypeError(`"${String(options.id)}" isn't a valid room id`);
+    if (isReservedRoomId(options.id)) throw new TypeError(`"${options.id}" is reserved for inboxes`);
     validateRoomKeys(options.keys);
     const limits = resolveLimits(options.limits);
     const saved = await options.storage.loadDocument(options.id);
@@ -174,6 +187,8 @@ export class Room {
     this.limits = limits;
     this.storage = options.storage;
     this.keys = options.keys;
+    this.keyList = Array.isArray(options.keys) ? options.keys : [options.keys as RoomKey];
+    this.onNotify = options.onNotify;
     this.now = options.now ?? Date.now;
     this.timers = options.timers === "manual" ? undefined : (options.timers ?? defaultTimers);
     this.onEmpty = options.onEmpty;
@@ -245,6 +260,7 @@ export class Room {
       user: state.user,
       access: state.access,
       expiresAt: state.expiresAt,
+      scope: state.scope,
       presence: new Set(state.presence),
       queue: Promise.resolve(),
       windowStart: now,
@@ -426,6 +442,7 @@ export class Room {
     data.user = token.user;
     data.access = token.access;
     data.expiresAt = token.expiresAt;
+    data.scope = this.keyList.find((k) => k.id === token.keyId)?.rooms ?? "*";
     data.expiryTimer = this.timers?.setTimeout(
       () => this.fail(conn, "token_expired", "The token has expired"),
       Math.max(0, token.expiresAt + CLOCK_SKEW_MS - this.now()),
@@ -484,6 +501,7 @@ export class Room {
       const outcome = await run;
       this.send(conn, data, { type: "response", id: message.id, ok: true, result: outcome.result });
       for (const event of outcome.events) this.broadcastEvent(event.name, event.data);
+      if (outcome.notifications?.length) this.onNotify?.(data.scope ?? "*", outcome.notifications);
     } catch (error) {
       if (error instanceof RequestFailure) {
         respondError(error.code, error.message);
@@ -676,6 +694,7 @@ export class Room {
       ...(data.user ? { user: data.user } : {}),
       ...(data.access ? { access: data.access } : {}),
       ...(data.expiresAt !== undefined ? { expiresAt: data.expiresAt } : {}),
+      ...(data.scope !== undefined ? { scope: data.scope } : {}),
       presence: [...data.presence],
     });
   }

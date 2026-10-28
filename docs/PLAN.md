@@ -143,10 +143,12 @@ The core ships an in-memory implementation for tests. Each host ships a durable 
 
 ### Notifications
 
-- A user gets a notification when they are mentioned, or when someone replies in a thread they started or commented in.
-- Notifications live in a per-user inbox across rooms, with read and unread state. On Cloudflare that is one Durable Object per user. On Node it is a table.
-- A connected client gets new notifications live over an inbox connection (`/v1/inbox`, authenticated with a token for that user).
-- The engine can call an app webhook for each notification, signed with HMAC, so the app can send email or push. The engine never sends email itself.
+- A user gets a notification when they are mentioned (in a new comment, or newly by an edit), or when someone replies in a thread they started or commented in. One per person per comment (a mention wins over a reply), never for your own comment.
+- Inboxes are per user and per **scope**: the room pattern of the key the app signs with. Two apps on one deployment with separate keys (`talvra:*`, `itch:*`) keep their users apart even if user ids collide. The newest 500 notifications are kept.
+- **Inbox tokens:** `createInboxToken({ userId }, key)` signs a read token for the key's reserved inbox room (`towhee.inbox`, or `talvra:towhee.inbox` for a `talvra:*` key). It opens only that user's inbox; room ids ending in `towhee.inbox` can't be opened as documents. The client asks its token endpoint for room `towhee.inbox`.
+- **Connection:** `/v1/inbox/<user>`; the client reads the user id from its token to build the URL, and the server checks the token's user and room. Requests `inbox.list` (`limit` up to 200, plus the unread count) and `inbox.markRead` (`ids` or `all`); events `notification.created` and `notification.read` go to all of that user's open inboxes in the scope, so read state follows across tabs.
+- **Webhook:** each stored notification is POSTed to `TOWHEE_WEBHOOK_URL` as `{ type: "notification", userId, scope, notification }`, with `x-towhee-timestamp` and `x-towhee-signature: v1=<hex HMAC-SHA256 of "<timestamp>.<body>">`. Retried after 1, 5 and 25 seconds on network errors, 5xx, 408 and 429. Apps check it with `verifyWebhook` (constant time, 5 minute window). The engine never sends email itself.
+- **Hosts:** on Node an inbox lives in memory only while used (its data is in SQLite); on Cloudflare each user's inbox is a Durable Object that rooms call over RPC.
 
 ### Hosts
 
