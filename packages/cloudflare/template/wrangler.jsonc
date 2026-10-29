@@ -21,6 +21,9 @@
   "vars": {
     // Optional: POST each notification to your app (also `wrangler secret put TOWHEE_WEBHOOK_SECRET`).
     // "TOWHEE_WEBHOOK_URL": "https://your-app.example/api/towhee-webhook",
+    // Optional: wipe throwaway rooms a day after they're created, once nobody is in them.
+    // "TOWHEE_EXPIRE_ROOMS": "demo:*",
+    // "TOWHEE_EXPIRE_AFTER_HOURS": "24",
     // Optional limits (defaults in parentheses):
     // "TOWHEE_MAX_CONNECTIONS": "100",
     // "TOWHEE_MAX_MESSAGE_BYTES": "1048576",

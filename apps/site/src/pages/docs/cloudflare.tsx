@@ -55,6 +55,8 @@ npx wrangler deploy`}
           [<C key="6">TOWHEE_MAX_MESSAGE_BYTES</C>, "var", "Default 1 MB"],
           [<C key="7">TOWHEE_MAX_DOCUMENT_BYTES</C>, "var", "Default 50 MB"],
           [<C key="8">TOWHEE_AUTH_TIMEOUT_MS</C>, "var", "Default 10000"],
+          [<C key="9">TOWHEE_EXPIRE_ROOMS</C>, "var", "Wipe rooms matching this pattern (like demo:*) once they expire"],
+          [<C key="10">TOWHEE_EXPIRE_AFTER_HOURS</C>, "var", "How long those rooms live (default 24)"],
         ]}
       />
 

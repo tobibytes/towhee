@@ -33,6 +33,8 @@ const token = await createRoomToken({ userId, room, access: "write" }, { id: "de
 | `TOWHEE_AUTH_TIMEOUT_MS` | var | 10000 |
 | `TOWHEE_WEBHOOK_URL` | var | POST each notification here |
 | `TOWHEE_WEBHOOK_SECRET` | secret | Signs webhooks (at least 32 characters) |
+| `TOWHEE_EXPIRE_ROOMS` | var | Wipe rooms matching this pattern (like `demo:*`) once they expire, when nobody is in them |
+| `TOWHEE_EXPIRE_AFTER_HOURS` | var | How long those rooms live (24) |
 
 ## How it works
 

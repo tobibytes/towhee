@@ -113,7 +113,7 @@ A session is done when its "Done when" list is true, CI is green and the PR is m
 ## 11. Collaborative docs demo
 
 - [ ] A docs editor page on the Junco site: TipTap on Yjs, with cursors, comments, history and inbox through Towhee
-- [ ] A Towhee deployment on Tobi's Cloudflare account and a small token endpoint for the demo (anonymous users, demo rooms only, rooms reset daily). The deployment and token endpoint exist since 8b; daily reset doesn't yet
+- [ ] A Towhee deployment on Tobi's Cloudflare account and a small token endpoint for the demo (anonymous users, demo rooms only, rooms reset daily). The deployment, token endpoint and daily reset (`TOWHEE_EXPIRE_ROOMS`) exist since 8b
 
 **Done when:** two browsers on the live Junco site edit, comment and restore versions together.
 
