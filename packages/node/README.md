@@ -1,3 +1,5 @@
+<p><a href="https://towhee.madebytobi.com"><img src="https://raw.githubusercontent.com/tobibytes/towhee/main/apps/site/public/brand/mark.svg" width="48" height="48" alt="Towhee"></a></p>
+
 # @towhee/node
 
 Run Towhee on Node 22.18 or newer: a WebSocket server with SQLite storage. Rooms are served at `/v1/rooms/<room>`, plus `GET /health`.
@@ -45,3 +47,7 @@ await server.listen(8080);
 ```
 
 Run one instance per data file: rooms live in that process's memory.
+
+---
+
+Part of [Towhee](https://github.com/tobibytes/towhee), realtime collaboration you host yourself. [Docs](https://towhee.madebytobi.com/docs) · [Live demo](https://towhee.madebytobi.com/demo) · MIT

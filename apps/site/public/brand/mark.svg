@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Towhee">
+  <title>Towhee</title>
+  <rect width="64" height="64" rx="15" fill="#FFF4E6"/>
+  <!-- tail -->
+  <path d="M6 23.5 22.5 31.5 21 41.5 7.5 37z" fill="#1C1917"/>
+  <!-- rufous flank -->
+  <circle cx="33" cy="39" r="16" fill="#C2410C"/>
+  <!-- black hood and back -->
+  <path d="M17 39a16 16 0 0 1 30.4-7L41 39z" fill="#1C1917"/>
+  <circle cx="43" cy="25" r="11.5" fill="#1C1917"/>
+  <!-- white belly -->
+  <path d="M33.5 41.5c4-3.6 10.4-4.4 14.6-1.6A16 16 0 0 1 30.5 54.7c-.9-4.9.2-10 3-13.2z" fill="#FFFBF5"/>
+  <!-- white wing spots -->
+  <path d="M23.5 33.2 29 31.4M26.5 37.3l4.6-1.6" stroke="#FFFBF5" stroke-width="2.2" stroke-linecap="round"/>
+  <!-- beak and eye -->
+  <path d="M53.6 22.2 61 25.3l-7.2 3z" fill="#1C1917"/>
+  <circle cx="47.2" cy="22.6" r="2.7" fill="#DC2626"/>
+  <circle cx="48" cy="21.8" r=".8" fill="#FFFBF5"/>
+</svg>

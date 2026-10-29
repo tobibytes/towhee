@@ -1,7 +1,7 @@
 {
   "name": "@towhee/react",
   "version": "0.1.0",
-  "description": "React hooks for Towhee: rooms, presence, status, threads, history and the inbox.",
+  "description": "React providers and hooks for Towhee: rooms, presence, connection status, comment threads, version history and the inbox.",
   "license": "MIT",
   "author": "Oluwatobi Olajide",
   "homepage": "https://towhee.madebytobi.com",

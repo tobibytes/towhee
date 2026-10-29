@@ -1,7 +1,7 @@
 {
   "name": "@towhee/node",
   "version": "0.1.0",
-  "description": "Run Towhee on Node: a WebSocket server with SQLite storage. Also published as the towhee Docker image.",
+  "description": "Run the Towhee server on Node: WebSockets with SQLite storage. Also the ghcr.io/tobibytes/towhee Docker image.",
   "license": "MIT",
   "author": "Oluwatobi Olajide",
   "homepage": "https://towhee.madebytobi.com",

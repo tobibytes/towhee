@@ -1,18 +1,50 @@
-# Towhee
+<p align="center">
+  <a href="https://towhee.madebytobi.com"><img src="apps/site/public/brand/mark.svg" width="88" height="88" alt="Towhee"></a>
+</p>
 
-A self-hosted realtime collaboration engine. Run it on Cloudflare or anywhere Node and Docker run, and give your app:
+<h1 align="center">Towhee</h1>
 
-- **Presence and cursors:** who's here, where they're pointing, what they're editing
-- **Shared state:** a Yjs document that syncs live and works offline, so TipTap, BlockNote, CodeMirror and other Yjs editors plug straight in
-- **Comments and threads:** anchored to text or to anything in your app, with replies, mentions, reactions and resolve
-- **History:** versions you can preview and restore
-- **Notifications:** an inbox per user for mentions and replies, plus a signed webhook for email
+<p align="center"><b>Realtime collaboration you host yourself.</b><br>
+Live cursors, Yjs documents, comments, version history and notifications, on your own Cloudflare account or any server that runs Docker.</p>
 
-Your app keeps its users. Its backend signs a short-lived token for each room, and Towhee checks it.
+<p align="center">
+  <a href="https://www.npmjs.com/package/@towhee/client"><img alt="npm" src="https://img.shields.io/npm/v/@towhee/client?label=npm&color=c2410c"></a>
+  <a href="https://github.com/tobibytes/towhee/pkgs/container/towhee"><img alt="Docker" src="https://img.shields.io/badge/docker-ghcr.io%2Ftobibytes%2Ftowhee-1c1917"></a>
+  <a href="https://github.com/tobibytes/towhee/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/tobibytes/towhee/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-1c1917"></a>
+</p>
 
-**Try it:** [towhee.madebytobi.com/demo](https://towhee.madebytobi.com/demo) is a shared board. Open it in two windows. Docs are at [towhee.madebytobi.com/docs](https://towhee.madebytobi.com/docs).
+<p align="center">
+  <a href="https://towhee.madebytobi.com/docs">Docs</a> ·
+  <a href="https://towhee.madebytobi.com/demo">Live demo</a> ·
+  <a href="https://towhee.madebytobi.com/examples">Examples</a> ·
+  <a href="https://junco.madebytobi.com/docs/collaboration/">UI kit</a> ·
+  <a href="https://github.com/tobibytes/towhee/releases">Releases</a>
+</p>
 
-> **Status:** v0.1, the first release. Pin versions. The plan is in [docs/PLAN.md](docs/PLAN.md) and the build order in [docs/SESSIONS.md](docs/SESSIONS.md).
+<p align="center">
+  <a href="https://towhee.madebytobi.com/demo">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="apps/site/public/screenshots/board-dark.png">
+      <img src="apps/site/public/screenshots/board-light.png" width="860" alt="Towhee Board: two people on one board, with live cursors and a ring on the card each is editing">
+    </picture>
+  </a>
+</p>
+
+## Why Towhee
+
+The pieces a hosted collaboration service sells, in a server you deploy in minutes and own:
+
+| | |
+| --- | --- |
+| **Presence and cursors** | Who's here, where they point, what they're editing. Identities come from your tokens. |
+| **Shared documents** | A Yjs document per room that syncs live and works offline. TipTap, BlockNote and CodeMirror plug straight in. |
+| **Comments** | Threads anchored to text or anything in your app, with replies, @mentions, reactions and resolve. |
+| **Version history** | Automatic and named versions; restore one for everyone, as an edit that can be undone. |
+| **Notifications** | An inbox per user for mentions and replies, live across tabs, plus a signed webhook for email. |
+| **Yours to run** | One core, two hosts: Cloudflare Durable Objects (idle rooms cost nothing) or Node with SQLite in Docker. |
+
+Your app keeps its users: its backend signs a short-lived token for each room, and Towhee checks it.
 
 ## Quick start
 
@@ -60,20 +92,26 @@ Open it in two tabs: each sees the other's text. From here, bind an editor to `r
 
 ## Packages
 
-| Package | Purpose |
-| --- | --- |
-| `@towhee/protocol` | Messages and framing shared by clients and servers |
-| `@towhee/auth` | Create room tokens in your backend; verify them in the server |
-| `@towhee/core` | Rooms: sync, presence, access, comments, history, notifications |
-| `@towhee/node` | Node WebSocket server with SQLite, also shipped as a Docker image |
-| `@towhee/cloudflare` | Worker + Durable Objects |
-| `@towhee/client` | Browser and Node client |
-| `@towhee/react` | React hooks: providers, presence, status, threads, history, inbox |
-| `apps/site` | towhee.madebytobi.com: landing page, docs, examples and the live demo (private, built with Junco) |
+| Package | | |
+| --- | --- | --- |
+| [`@towhee/client`](packages/client) | Browser and Node client: synced `Y.Doc`, presence, comments, history, inbox | [![npm](https://img.shields.io/npm/v/@towhee/client?label=&color=c2410c)](https://www.npmjs.com/package/@towhee/client) |
+| [`@towhee/react`](packages/react) | React providers and hooks | [![npm](https://img.shields.io/npm/v/@towhee/react?label=&color=c2410c)](https://www.npmjs.com/package/@towhee/react) |
+| [`@towhee/auth`](packages/auth) | Sign room tokens in your backend; verify webhooks | [![npm](https://img.shields.io/npm/v/@towhee/auth?label=&color=c2410c)](https://www.npmjs.com/package/@towhee/auth) |
+| [`@towhee/cloudflare`](packages/cloudflare) | The server on Cloudflare: a Worker and Durable Objects | [![npm](https://img.shields.io/npm/v/@towhee/cloudflare?label=&color=c2410c)](https://www.npmjs.com/package/@towhee/cloudflare) |
+| [`@towhee/node`](packages/node) | The server on Node with SQLite; the `ghcr.io/tobibytes/towhee` image | [![npm](https://img.shields.io/npm/v/@towhee/node?label=&color=c2410c)](https://www.npmjs.com/package/@towhee/node) |
+| [`@towhee/core`](packages/core) | The engine both servers run | [![npm](https://img.shields.io/npm/v/@towhee/core?label=&color=c2410c)](https://www.npmjs.com/package/@towhee/core) |
+| [`@towhee/protocol`](packages/protocol) | Wire protocol and shared types | [![npm](https://img.shields.io/npm/v/@towhee/protocol?label=&color=c2410c)](https://www.npmjs.com/package/@towhee/protocol) |
 
-UI components for all of this live in [Junco](https://github.com/tobibytes/junco) (`@junco/collab`).
+Ready-made UI (avatar stack, cursors, comments, history, inbox) lives in [Junco](https://junco.madebytobi.com/docs/collaboration/) as `@junco/collab`, with a Towhee adapter. The site and demo in [`apps/site`](apps/site) are built with it.
 
-## Develop
+## Docs
+
+- [Quick start and overview](https://towhee.madebytobi.com/docs)
+- [Using the client](https://towhee.madebytobi.com/docs/client) · [React](https://towhee.madebytobi.com/docs/react) · [Tokens and access](https://towhee.madebytobi.com/docs/tokens)
+- [Deploy on Cloudflare](https://towhee.madebytobi.com/docs/cloudflare) · [Run with Docker or Node](https://towhee.madebytobi.com/docs/docker) · [Managing Towhee](https://towhee.madebytobi.com/docs/managing)
+- [Endpoints, limits and errors](https://towhee.madebytobi.com/docs/reference)
+
+## Contributing
 
 ```bash
 pnpm install
@@ -83,8 +121,8 @@ pnpm typecheck
 pnpm lint
 ```
 
-Node 22.18 or newer.
+Node 22.18 or newer. The plan is in [docs/PLAN.md](docs/PLAN.md), the build order in [docs/SESSIONS.md](docs/SESSIONS.md) and the release process in [docs/RELEASING.md](docs/RELEASING.md). Add a changeset (`pnpm changeset`) when a package changes.
 
 ## License
 
-MIT
+[MIT](LICENSE) © Oluwatobi Olajide
