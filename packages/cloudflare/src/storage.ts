@@ -25,6 +25,19 @@ export class DurableObjectSqlStorage implements Storage {
 
   constructor(private readonly storage: DurableObjectStorage) {
     this.sql = storage.sql;
+    this.createTables();
+    this.inbox = new SqlInboxStore(this.sql);
+    this.threads = new SqlThreadStore(this.sql);
+    this.versions = new SqlVersionStore(this.sql, storage);
+  }
+
+  /** Deletes everything this object stored, then sets the tables up again, empty. */
+  async clear(): Promise<void> {
+    await this.storage.deleteAll();
+    this.createTables();
+  }
+
+  private createTables(): void {
     this.sql.exec(`
       CREATE TABLE IF NOT EXISTS towhee_state (room TEXT NOT NULL, chunk INTEGER NOT NULL, data BLOB NOT NULL, PRIMARY KEY (room, chunk));
       CREATE TABLE IF NOT EXISTS towhee_updates (id INTEGER PRIMARY KEY AUTOINCREMENT, room TEXT NOT NULL, data BLOB NOT NULL);
@@ -37,9 +50,6 @@ export class DurableObjectSqlStorage implements Storage {
       CREATE TABLE IF NOT EXISTS towhee_notifications (scope TEXT NOT NULL, user_id TEXT NOT NULL, id TEXT NOT NULL, created_at REAL NOT NULL, read_at REAL, data TEXT NOT NULL, PRIMARY KEY (scope, user_id, id));
       CREATE INDEX IF NOT EXISTS towhee_notifications_by_user ON towhee_notifications (scope, user_id, created_at);
     `);
-    this.inbox = new SqlInboxStore(this.sql);
-    this.threads = new SqlThreadStore(this.sql);
-    this.versions = new SqlVersionStore(this.sql, storage);
   }
 
   async loadDocument(room: string): Promise<Uint8Array | null> {

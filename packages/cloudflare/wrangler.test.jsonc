@@ -16,6 +16,7 @@
   "vars": {
     // A dummy test key, not a real secret.
     "TOWHEE_SECRET": "cloudflare-test-key-not-a-secret-0000",
-    "TOWHEE_AUTH_TIMEOUT_MS": "300"
+    "TOWHEE_AUTH_TIMEOUT_MS": "300",
+    "TOWHEE_EXPIRE_ROOMS": "cf:expire-*"
   }
 }

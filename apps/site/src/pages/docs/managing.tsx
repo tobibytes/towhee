@@ -107,6 +107,12 @@ export async function POST(request) {
         Room ids are yours to choose: putting a tenant or document id in them (<C>acme:doc:42</C>) makes them easy to find. On Node, rooms
         are rows in the SQLite file, keyed by room id. Notifications keep the newest 500 per user.
       </P>
+      <P>
+        For throwaway rooms (demos, previews, test runs) set <C>TOWHEE_EXPIRE_ROOMS</C> to a pattern like <C>demo:*</C> on Cloudflare.
+        Matching rooms are wiped once they&apos;re older than <C>TOWHEE_EXPIRE_AFTER_HOURS</C> (default 24): document, threads,
+        versions, everything. A room that still has people in it waits until the last one leaves. Someone who kept the old board open
+        offline and comes back later brings their copy with them, as with any Yjs document.
+      </P>
       <Note title="Coming later">
         An admin API (list rooms, export and delete a room, revoke a user) is planned. Today, managing data means working with the
         storage directly.

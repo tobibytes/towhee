@@ -186,7 +186,9 @@ export function Board({ room, boardId }: { room: RoomConnection; boardId: string
         <Badge variant="outline" hasDot color={status === "connected" ? "success" : status === "disconnected" ? "danger" : "warning"}>
           {status === "connected" ? (synced ? "Live" : "Syncing") : status}
         </Badge>
-        <span className="hidden font-mono text-xs text-muted-foreground sm:inline">demo:{boardId}</span>
+        <span className="hidden text-xs text-muted-foreground sm:inline">
+          <span className="font-mono">demo:{boardId}</span> · resets a day after it&apos;s made
+        </span>
         <div className="ml-auto flex items-center gap-2">
           <People room={room} others={others} />
           <Tooltip content="Copy link">

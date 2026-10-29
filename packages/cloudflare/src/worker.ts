@@ -1,6 +1,6 @@
 import { type RoomKey, validateRoomKeys } from "@towhee/auth";
 import { type Connection, type ConnectionState, Inbox, type Limits, landingPage, Room, sendWebhook, type WebhookTarget } from "@towhee/core";
-import { closeCodeFor, isReservedRoomId, isValidRoomId, isValidUserId, type Notification } from "@towhee/protocol";
+import { closeCodeFor, isReservedRoomId, isValidRoomId, isValidUserId, type Notification, roomMatches } from "@towhee/protocol";
 import { DurableObject } from "cloudflare:workers";
 import { DurableObjectSqlStorage } from "./storage";
 
@@ -21,6 +21,10 @@ export interface TowheeEnv {
   /** POST each notification here, signed with `TOWHEE_WEBHOOK_SECRET`. */
   TOWHEE_WEBHOOK_URL?: string;
   TOWHEE_WEBHOOK_SECRET?: string;
+  /** Rooms matching this pattern (like `demo:*`) are wiped once they're older than `TOWHEE_EXPIRE_AFTER_HOURS`. */
+  TOWHEE_EXPIRE_ROOMS?: string;
+  /** Default 24. */
+  TOWHEE_EXPIRE_AFTER_HOURS?: string;
 }
 
 /** The Worker passes the room id or user id to the Durable Object in these headers. */
@@ -47,6 +51,15 @@ export function keysFromEnv(env: TowheeEnv): RoomKey[] {
   }
   validateRoomKeys(keys);
   return keys;
+}
+
+/** How long rooms matching `TOWHEE_EXPIRE_ROOMS` live, in milliseconds. */
+export function expireAfterFromEnv(env: TowheeEnv): number {
+  const raw = env.TOWHEE_EXPIRE_AFTER_HOURS;
+  if (raw === undefined || raw === "") return 24 * 3_600_000;
+  const hours = Number(raw);
+  if (!Number.isFinite(hours) || hours <= 0) throw new Error("TOWHEE_EXPIRE_AFTER_HOURS must be a positive number");
+  return hours * 3_600_000;
 }
 
 export function limitsFromEnv(env: TowheeEnv): Partial<Limits> {
@@ -149,6 +162,17 @@ abstract class SocketHost<Target extends Hosted> extends DurableObject<TowheeEnv
   /** After sockets were restored on wake. */
   protected afterRestore(_target: Target, _restored: number): void {}
 
+  /** A deadline of the host's own, on top of the target's; the alarm fires at the earlier one. */
+  protected hostDeadline(_target: Target): number | undefined {
+    return undefined;
+  }
+
+  /** Drops the in-memory target, so the next event rebuilds it from storage. */
+  protected forget(): void {
+    this.target = undefined;
+    this.alarmAt = undefined;
+  }
+
   override async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     const target = await this.getTarget();
     const conn = this.connection(ws);
@@ -205,7 +229,7 @@ abstract class SocketHost<Target extends Hosted> extends DurableObject<TowheeEnv
     for (const result of await Promise.allSettled(this.pending.splice(0))) {
       if (result.status === "rejected") console.error("[towhee]", result.reason);
     }
-    const next = target.nextDeadline();
+    const next = earliest(target.nextDeadline(), this.hostDeadline(target));
     if (next === undefined) return;
     if (this.alarmAt === undefined) this.alarmAt = await this.ctx.storage.getAlarm();
     if (this.alarmAt === null || next < this.alarmAt) {
@@ -278,14 +302,18 @@ abstract class SocketHost<Target extends Hosted> extends DurableObject<TowheeEnv
   }
 }
 
+const earliest = (a: number | undefined, b: number | undefined) => (a === undefined ? b : b === undefined ? a : Math.min(a, b));
+
 /** One room: a shared document, presence, threads and history. */
 export class TowheeRoom extends SocketHost<Room> {
   override async fetch(request: Request): Promise<Response> {
     const roomId = request.headers.get(ROOM_HEADER);
     if (!isValidRoomId(roomId)) return new Response("Missing room id", { status: 400 });
     const known = this.storage.getMeta("room");
-    if (known === undefined) this.storage.setMeta("room", roomId);
-    else if (known !== roomId) return new Response("Wrong room", { status: 400 });
+    if (known === undefined) {
+      this.storage.setMeta("room", roomId);
+      this.storage.setMeta("created", String(Date.now()));
+    } else if (known !== roomId) return new Response("Wrong room", { status: 400 });
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response("Expected a WebSocket upgrade", { status: 426 });
     return this.accept();
   }
@@ -307,6 +335,40 @@ export class TowheeRoom extends SocketHost<Room> {
 
   protected override afterRestore(room: Room, restored: number): void {
     if (restored > 0) room.requestPresence();
+  }
+
+  /**
+   * Rooms matching `TOWHEE_EXPIRE_ROOMS` are wiped when they expire, but never under people who
+   * are in them: then the last one to leave schedules it.
+   */
+  protected override hostDeadline(room: Room): number | undefined {
+    const at = this.expiresAt();
+    if (at === undefined || (room.connectionCount > 0 && at <= Date.now())) return undefined;
+    return at;
+  }
+
+  override async alarm(): Promise<void> {
+    const at = this.expiresAt();
+    if (at !== undefined && at <= Date.now() && (await this.getTarget()).connectionCount === 0) {
+      this.forget();
+      await this.ctx.storage.deleteAlarm();
+      await this.storage.clear();
+      return;
+    }
+    await super.alarm();
+  }
+
+  /** When this room expires, or undefined when it doesn't. Rooms from before expiry was set start counting now. */
+  private expiresAt(): number | undefined {
+    const pattern = this.env.TOWHEE_EXPIRE_ROOMS;
+    const room = this.storage.getMeta("room");
+    if (!pattern || room === undefined || !roomMatches(pattern, room)) return undefined;
+    let created = Number(this.storage.getMeta("created"));
+    if (!created) {
+      created = Date.now();
+      this.storage.setMeta("created", String(created));
+    }
+    return created + expireAfterFromEnv(this.env);
   }
 
   /** Hands notifications to the users' inbox objects; the current event waits for them. */
