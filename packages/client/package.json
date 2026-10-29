@@ -1,6 +1,6 @@
 {
   "name": "@towhee/client",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Connect to Towhee from the browser or Node: a synced Y.Doc, presence, comments, version history and an inbox, with reconnects and offline edits.",
   "license": "MIT",
   "author": "Oluwatobi Olajide",

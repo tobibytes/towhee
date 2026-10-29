@@ -1,5 +1,13 @@
 # @towhee/client
 
+## 0.1.2
+
+### Patch Changes
+
+- 5a7d088: Admin API: set `TOWHEE_ADMIN_SECRET` to get `/v1/admin/rooms/<room>` (info), `/export`, `/kick` and `DELETE` on both hosts. New close codes `room_deleted` and `removed` stop clients from reconnecting. `Storage` gains `deleteRoom` (custom storages need to add it).
+- Updated dependencies [5a7d088]
+  - @towhee/protocol@0.2.0
+
 ## 0.1.1
 
 ### Patch Changes
