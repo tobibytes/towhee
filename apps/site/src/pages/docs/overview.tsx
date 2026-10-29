@@ -32,7 +32,12 @@ export function Overview() {
           <><C>@towhee/auth</C>: <C>createRoomToken</C> and <C>createInboxToken</C> for your backend; <C>verifyWebhook</C> for notification webhooks.</>,
           <><C>@towhee/cloudflare</C>: the server as a Worker with a Durable Object per room and per inbox.</>,
           <><C>@towhee/node</C>: the server as a Node process with SQLite, also a Docker image.</>,
+          <><C>@towhee/react</C>: providers and hooks (<A href="/docs/react">React</A>).</>,
           <><C>@towhee/core</C> and <C>@towhee/protocol</C>: what both servers and the client share.</>,
+          <>
+            <A href="https://junco.madebytobi.com/docs/collaboration/">@junco/collab</A> (from Junco): ready-made UI for all of it, with a
+            Towhee adapter.
+          </>,
         ]}
       />
 

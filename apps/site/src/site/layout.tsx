@@ -5,12 +5,16 @@ import { ThemeToggle } from "./theme-toggle";
 
 export const GITHUB = "https://github.com/tobibytes/towhee";
 export const JUNCO = "https://junco.madebytobi.com";
+/** Junco's collaboration UI (@junco/collab) and the board on Junco's examples page. */
+export const JUNCO_COLLAB = `${JUNCO}/docs/collaboration/`;
+export const JUNCO_EXAMPLE = `${JUNCO}/examples/towhee-board/`;
 
 const brand = { name: "Towhee", href: "/", logo: <BrandMark className="size-6 text-primary" /> };
 const links = [
   { label: "Docs", href: "/docs" },
   { label: "Examples", href: "/examples" },
   { label: "Live demo", href: "/demo" },
+  { label: "UI kit", href: JUNCO_COLLAB },
   { label: "GitHub", href: GITHUB },
 ];
 
@@ -68,6 +72,9 @@ export function Footer() {
           links: [
             { label: "GitHub", href: GITHUB },
             { label: "Junco design system", href: JUNCO },
+            { label: "Collaboration UI (@junco/collab)", href: JUNCO_COLLAB },
+            { label: "Towhee Board on Junco", href: JUNCO_EXAMPLE },
+            { label: "npm", href: "https://www.npmjs.com/org/towhee" },
           ],
         },
       ]}
