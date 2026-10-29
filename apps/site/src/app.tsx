@@ -1,9 +1,8 @@
 import { createBrowserRouter } from "react-router";
-import { Home } from "./pages/home";
 import { NotFound } from "./pages/not-found";
 import { RootLayout } from "./site/layout";
 
-/** The home page loads with the site; the demo (Yjs, the client) and the docs load when visited. */
+/** Every page loads when visited: the home page, the demo (Yjs, the client), the docs. */
 const docs = () => import("./pages/docs");
 const demo = () => import("./demo/page");
 
@@ -11,7 +10,7 @@ export const router = createBrowserRouter([
   {
     element: <RootLayout />,
     children: [
-      { path: "/", element: <Home /> },
+      { path: "/", lazy: { Component: () => import("./pages/home").then((m) => m.Home) } },
       { path: "/examples", lazy: { Component: () => import("./pages/examples").then((m) => m.Examples) } },
       { path: "/demo", lazy: { Component: () => demo().then((m) => m.DemoNew) } },
       { path: "/demo/:boardId", lazy: { Component: () => demo().then((m) => m.DemoBoard) } },
