@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Towhee: realtime collaboration you host yourself</title>
+    <meta name="description" content="Towhee is an open source realtime collaboration server: live presence and cursors, shared documents that sync and work offline, comments, version history and notifications. Run it on Cloudflare or with Docker." />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script>
+      // Junco's themeScript for storage key "towhee": theme and motion set before paint, no flash.
+      (() => {
+        let theme = "system";
+        let motion = "full";
+        try {
+          theme = localStorage.getItem("towhee-theme") || theme;
+          motion = localStorage.getItem("towhee-motion") || motion;
+        } catch {}
+        const dark = theme === "dark" || (theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+        const root = document.documentElement;
+        root.classList.toggle("dark", dark);
+        root.dataset.theme = dark ? "dark" : "light";
+        root.dataset.motion = motion;
+        root.style.colorScheme = dark ? "dark" : "light";
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

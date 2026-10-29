@@ -1,6 +1,7 @@
-// Tobi's Towhee deployment at https://towhee.madebytobi.com (wss://towhee.madebytobi.com).
-// Deploy from the repo root:  pnpm build && pnpm --filter @towhee/deploy-cloudflare deploy
-// Secrets (already set; only for a new account): npx wrangler secret put TOWHEE_SECRET
+// Tobi's Towhee deployment at https://towhee.madebytobi.com: the website and live demo (apps/site),
+// and the Towhee server (wss://towhee.madebytobi.com/v1/...).
+// Deploy from the repo root:  pnpm install && pnpm build && pnpm --filter @towhee/deploy-cloudflare deploy
+// Secrets: TOWHEE_KEYS = [{"id":"default","secret":...},{"id":"demo","secret":...,"rooms":"demo:*"}]
 {
   "name": "towhee",
   "main": "src/index.ts",
@@ -15,6 +16,14 @@
     { "tag": "v1", "new_sqlite_classes": ["TowheeRoom"] },
     { "tag": "v2", "new_sqlite_classes": ["TowheeInbox"] }
   ],
+  // The site's files are served directly; these paths run the Worker instead. Anything else that
+  // isn't a file gets index.html, so client-side routes like /docs/client load on refresh.
+  "assets": {
+    "directory": "../../apps/site/dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/v1/*", "/health", "/demo/token"]
+  },
+  "ratelimits": [{ "name": "DEMO_LIMITER", "namespace_id": "4102", "simple": { "limit": 30, "period": 60 } }],
   // Cloudflare creates the DNS record and certificate for the custom domain.
   "routes": [{ "pattern": "towhee.madebytobi.com", "custom_domain": true }],
   "workers_dev": false,

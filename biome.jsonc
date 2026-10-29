@@ -6,6 +6,8 @@
   },
   "formatter": { "enabled": false },
   "assist": { "enabled": false },
+  // The site's CSS uses Tailwind v4 directives (@source, @theme, @utility).
+  "css": { "parser": { "tailwindDirectives": true } },
   "linter": {
     "enabled": true,
     "rules": {

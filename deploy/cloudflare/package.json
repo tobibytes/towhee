@@ -5,14 +5,19 @@
   "description": "Tobi's Towhee deployment on Cloudflare (towhee.madebytobi.com).",
   "scripts": {
     "deploy": "wrangler deploy",
-    "smoke": "node smoke.mjs"
+    "smoke": "node smoke.mjs",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@towhee/cloudflare": "workspace:*"
+    "@towhee/auth": "workspace:*",
+    "@towhee/cloudflare": "workspace:*",
+    "@towhee/protocol": "workspace:*"
   },
   "devDependencies": {
-    "@towhee/auth": "workspace:*",
+    "@cloudflare/workers-types": "^5.20261027.1",
     "@towhee/client": "workspace:*",
+    "@towhee/site": "workspace:*",
+    "typescript": "^5.6.0",
     "wrangler": "^4.0.0"
   }
 }

@@ -31,6 +31,8 @@ describe("comment bodies", () => {
       para({ type: "link", url: "https://x.com", children: [] }),
       para({ type: "link", url: "https://x.com", children: [{ type: "mention", userId: "a" }] }),
       para({ type: "mention", userId: "" }),
+      para({ type: "mention", userId: "ada", name: "" }),
+      para({ type: "mention", userId: "ada", name: 7 }),
       textBody("x".repeat(COMMENT_LIMITS.bodyBytes)),
     ];
     for (const b of bad) expect(isCommentBody(b), JSON.stringify(b).slice(0, 80)).toBe(false);
@@ -49,6 +51,12 @@ describe("comment bodies", () => {
     const body = para({ type: "mention", userId: "ada" }, { type: "text", text: " and " }, { type: "mention", userId: "bob" }, { type: "mention", userId: "ada" });
     expect(bodyMentions(body as never)).toEqual(["ada", "bob"]);
     expect(bodyText(body as never)).toBe("@ada and @bob@ada");
+  });
+
+  it("show a mention's name in plain text when it has one", () => {
+    const body = para({ type: "mention", userId: "u_1", name: "Ada" }, { type: "text", text: " look" });
+    expect(isCommentBody(body)).toBe(true);
+    expect(bodyText(body as never)).toBe("@Ada look");
   });
 });
 
