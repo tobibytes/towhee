@@ -1,0 +1,2 @@
+# Copy to .dev.vars for `wrangler dev`. Local-only secrets: never use these in a deployment.
+TOWHEE_KEYS='[{"id":"default","secret":"local-dev-default-key-0123456789abcdef"},{"id":"demo","secret":"local-dev-demo-key-0123456789abcdef","rooms":"demo:*"}]'
