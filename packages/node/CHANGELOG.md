@@ -1,5 +1,16 @@
 # @towhee/node
 
+## 0.3.0
+
+### Minor Changes
+
+- 2f40c50: The admin API lists rooms: `GET /v1/admin/rooms?prefix=&cursor=&limit=`. Node reads them from storage (`Storage.listRooms`, optional); Cloudflare keeps an index in a new `TowheeDirectory` Durable Object. Add its binding and a `v3` migration (see the template) and export it from your Worker; rooms made earlier join the index on their next visit.
+
+### Patch Changes
+
+- Updated dependencies [2f40c50]
+  - @towhee/core@0.3.0
+
 ## 0.2.0
 
 ### Minor Changes
