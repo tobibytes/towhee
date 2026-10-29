@@ -2,12 +2,30 @@ import { createClient, type Other, type RoomConnection, type Status, type Thread
 import * as React from "react";
 import * as Y from "yjs";
 
+/**
+ * The first token request sets the visitor cookie, so the others wait for it. Otherwise a new
+ * visitor's room and inbox tokens are minted at once, each for a different visitor id, and
+ * mentions land in an inbox nobody has open.
+ */
+let first: Promise<unknown> | undefined;
+const oneVisitorFetch: typeof fetch = async (input, init) => {
+  if (first) {
+    await first;
+    return fetch(input, init);
+  }
+  const response = fetch(input, init);
+  first = response.catch(() => {
+    first = undefined;
+  });
+  return response;
+};
+
 /** The demo server is this site's own Worker: /v1 for rooms, /demo/token for anonymous demo tokens. */
 let client: TowheeClient | undefined;
 export function demoClient(): TowheeClient {
   if (!client) {
     const url = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
-    client = createClient({ url, authEndpoint: "/demo/token" });
+    client = createClient({ url, authEndpoint: "/demo/token", fetch: oneVisitorFetch });
   }
   return client;
 }
