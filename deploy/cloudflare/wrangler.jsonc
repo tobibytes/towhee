@@ -24,7 +24,12 @@
     "run_worker_first": ["/v1/*", "/health", "/demo/token"]
   },
   // Demo boards are wiped a day after they're created, once nobody is on them.
-  "vars": { "TOWHEE_EXPIRE_ROOMS": "demo:*", "TOWHEE_EXPIRE_AFTER_HOURS": "24" },
+  // Junco's docs editor (and its local dev server) use the demo token endpoint too.
+  "vars": {
+    "TOWHEE_EXPIRE_ROOMS": "demo:*",
+    "TOWHEE_EXPIRE_AFTER_HOURS": "24",
+    "DEMO_ORIGINS": "https://junco.madebytobi.com,http://localhost:3000"
+  },
   "ratelimits": [{ "name": "DEMO_LIMITER", "namespace_id": "4102", "simple": { "limit": 30, "period": 60 } }],
   // Cloudflare creates the DNS record and certificate for the custom domain.
   "routes": [{ "pattern": "towhee.madebytobi.com", "custom_domain": true }],
