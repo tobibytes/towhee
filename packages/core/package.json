@@ -1,6 +1,6 @@
 {
   "name": "@towhee/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Towhee rooms: Yjs sync, presence, access checks and limits over any transport and storage. No Node or Cloudflare APIs.",
   "license": "MIT",
   "author": "Oluwatobi Olajide",

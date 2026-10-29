@@ -1,6 +1,6 @@
 {
   "name": "@towhee/auth",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Create Towhee room tokens in your backend and verify them on the server. WebCrypto only: runs on Node, Workers, Deno and Bun.",
   "license": "MIT",
   "author": "Oluwatobi Olajide",
