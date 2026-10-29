@@ -332,15 +332,19 @@ export class TowheeServer {
     res.end(Buffer.from(await response.arrayBuffer()));
   }
 
-  private readonly adminOps: AdminOps = {
-    info: async (id) => (await this.existingRoom(id))?.info() ?? null,
-    export: async (id) => (await this.existingRoom(id))?.export() ?? null,
-    delete: (id) => this.deleteRoom(id),
-    kick: async (id, userId) => {
-      const entry = this.active.get(id);
-      return entry ? (await entry.room).kick(userId) : 0;
-    },
-  };
+  private get adminOps(): AdminOps {
+    const storage = this.storage;
+    return {
+      ...(storage.listRooms ? { list: (options) => storage.listRooms!(options) } : {}),
+      info: async (id) => (await this.existingRoom(id))?.info() ?? null,
+      export: async (id) => (await this.existingRoom(id))?.export() ?? null,
+      delete: (id) => this.deleteRoom(id),
+      kick: async (id, userId) => {
+        const entry = this.active.get(id);
+        return entry ? (await entry.room).kick(userId) : 0;
+      },
+    };
+  }
 
   private async hasData(id: string): Promise<boolean> {
     return (

@@ -212,6 +212,22 @@ export function storageSuite(name: string, create: () => Storage | Promise<Stora
       await storage.deleteRoom("never-existed");
     });
 
+    it("lists rooms with anything saved, in order, by prefix and page", async () => {
+      const storage = await create();
+      if (!storage.listRooms) return;
+      const { doc } = build("x");
+      const state = Y.encodeStateAsUpdate(doc);
+      await storage.appendUpdate("b:2", state);
+      await storage.compact("a:1", state);
+      await storage.threads.put("b:1", { id: "t", resolved: false, createdBy: "u", createdAt: 1, updatedAt: 1, comments: [] });
+      await storage.versions.save("c:1", { id: "v", kind: "manual", createdAt: 1, size: state.length }, state);
+      expect(await storage.listRooms({ limit: 10 })).toEqual(["a:1", "b:1", "b:2", "c:1"]);
+      expect(await storage.listRooms({ prefix: "b:", limit: 10 })).toEqual(["b:1", "b:2"]);
+      expect(await storage.listRooms({ after: "b:1", limit: 2 })).toEqual(["b:2", "c:1"]);
+      await storage.deleteRoom("b:1");
+      expect(await storage.listRooms({ prefix: "b:", limit: 10 })).toEqual(["b:2"]);
+    });
+
     it("stores large documents", async () => {
       const storage = await create();
       const { doc } = build("x".repeat(512 * 1024));

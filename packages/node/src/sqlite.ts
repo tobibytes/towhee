@@ -60,6 +60,16 @@ export class SqliteStorage implements Storage {
     this.statements.append.run(room, update);
   }
 
+  async listRooms({ prefix = "", after = "", limit }: { prefix?: string; after?: string; limit: number }): Promise<string[]> {
+    const rows = this.db
+      .prepare(
+        `SELECT room FROM (SELECT room FROM documents UNION SELECT room FROM updates UNION SELECT room FROM threads UNION SELECT room FROM versions)
+         WHERE substr(room, 1, ?) = ? AND room > ? ORDER BY room LIMIT ?`,
+      )
+      .all(prefix.length, prefix, after, limit) as { room: string }[];
+    return rows.map((r) => r.room);
+  }
+
   async deleteRoom(room: string): Promise<void> {
     this.db.exec("BEGIN IMMEDIATE");
     try {

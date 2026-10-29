@@ -26,17 +26,19 @@ npx wrangler deploy`}
       <Code
         code={`{
   "name": "towhee",
-  "main": "src/index.ts",            // export { default, TowheeInbox, TowheeRoom } from "@towhee/cloudflare";
+  "main": "src/index.ts",            // export { default, TowheeDirectory, TowheeInbox, TowheeRoom } from "@towhee/cloudflare";
   "compatibility_date": "2026-10-01",
   "durable_objects": {
     "bindings": [
       { "name": "TOWHEE_ROOMS", "class_name": "TowheeRoom" },
-      { "name": "TOWHEE_INBOXES", "class_name": "TowheeInbox" }
+      { "name": "TOWHEE_INBOXES", "class_name": "TowheeInbox" },
+      { "name": "TOWHEE_DIRECTORY", "class_name": "TowheeDirectory" } // optional: the admin API's room list
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["TowheeRoom"] },
-    { "tag": "v2", "new_sqlite_classes": ["TowheeInbox"] }
+    { "tag": "v2", "new_sqlite_classes": ["TowheeInbox"] },
+    { "tag": "v3", "new_sqlite_classes": ["TowheeDirectory"] }
   ],
   // Optional: your own domain. Cloudflare creates the DNS record and certificate.
   "routes": [{ "pattern": "towhee.example.com", "custom_domain": true }]

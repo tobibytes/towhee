@@ -9,12 +9,14 @@
   "durable_objects": {
     "bindings": [
       { "name": "TOWHEE_ROOMS", "class_name": "TowheeRoom" },
-      { "name": "TOWHEE_INBOXES", "class_name": "TowheeInbox" }
+      { "name": "TOWHEE_INBOXES", "class_name": "TowheeInbox" },
+      { "name": "TOWHEE_DIRECTORY", "class_name": "TowheeDirectory" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["TowheeRoom"] },
-    { "tag": "v2", "new_sqlite_classes": ["TowheeInbox"] }
+    { "tag": "v2", "new_sqlite_classes": ["TowheeInbox"] },
+    { "tag": "v3", "new_sqlite_classes": ["TowheeDirectory"] }
   ],
   // The site's files are served directly; these paths run the Worker instead. Anything else that
   // isn't a file gets index.html, so client-side routes like /docs/client load on refresh.

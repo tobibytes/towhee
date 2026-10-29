@@ -41,7 +41,12 @@ export interface TowheeEnv {
   TOWHEE_EXPIRE_AFTER_HOURS?: string;
   /** Turns on the admin API at /v1/admin (a secret, at least 32 characters). */
   TOWHEE_ADMIN_SECRET?: string;
+  /** Durable Object namespace bound to {@link TowheeDirectory}: lets the admin API list rooms. */
+  TOWHEE_DIRECTORY?: DurableObjectNamespace<TowheeDirectory>;
 }
+
+/** The one directory instance. */
+const directoryOf = (env: TowheeEnv) => env.TOWHEE_DIRECTORY?.getByName("rooms");
 
 /** The Worker passes the room id or user id to the Durable Object in these headers. */
 const ROOM_HEADER = "x-towhee-room";
@@ -122,7 +127,9 @@ export async function handleRequest(request: Request, env: TowheeEnv): Promise<R
   }
   if (isAdminPath(url.pathname)) {
     const stub = (id: string) => env.TOWHEE_ROOMS.getByName(id);
+    const directory = directoryOf(env);
     const ops: AdminOps = {
+      ...(directory ? { list: (options) => directory.list(options) } : {}),
       info: (id) => stub(id).adminInfo(id),
       export: (id) => stub(id).adminExport(id),
       delete: (id) => stub(id).adminDelete(id),
@@ -346,6 +353,16 @@ export class TowheeRoom extends SocketHost<Room> {
       this.storage.setMeta("room", roomId);
       this.storage.setMeta("created", String(Date.now()));
     } else if (known !== roomId) return new Response("Wrong room", { status: 400 });
+    // Rooms made before the directory existed sign up on their next visit.
+    const directory = directoryOf(this.env);
+    if (directory && this.storage.getMeta("listed") === undefined) {
+      try {
+        await directory.add(roomId);
+        this.storage.setMeta("listed", "1");
+      } catch (error) {
+        console.error(`[towhee] couldn't list room ${roomId}:`, error);
+      }
+    }
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response("Expected a WebSocket upgrade", { status: 426 });
     return this.accept();
   }
@@ -405,10 +422,17 @@ export class TowheeRoom extends SocketHost<Room> {
     if (!this.isRoom(id)) return false;
     const room = await this.getTarget();
     await room.close("room_deleted");
+    await this.erase();
+    return true;
+  }
+
+  /** Forgets everything this room stored, and takes it out of the directory. */
+  private async erase(): Promise<void> {
+    const id = this.storage.getMeta("room");
     this.forget();
     await this.ctx.storage.deleteAlarm();
     await this.storage.clear();
-    return true;
+    if (id) await directoryOf(this.env)?.remove(id);
   }
 
   /**
@@ -424,9 +448,7 @@ export class TowheeRoom extends SocketHost<Room> {
   override async alarm(): Promise<void> {
     const at = this.expiresAt();
     if (at !== undefined && at <= Date.now() && (await this.getTarget()).connectionCount === 0) {
-      this.forget();
-      await this.ctx.storage.deleteAlarm();
-      await this.storage.clear();
+      await this.erase();
       return;
     }
     await super.alarm();
@@ -499,6 +521,36 @@ export class TowheeInbox extends SocketHost<Inbox> {
     const known = this.storage.getMeta("user");
     if (known === undefined) this.storage.setMeta("user", userId);
     return known === undefined || known === userId;
+  }
+}
+
+/**
+ * An index of room ids for the admin API's room list: Durable Objects can't be enumerated. One
+ * instance; rooms add themselves when created (or on their next visit) and remove themselves when
+ * deleted or expired.
+ */
+export class TowheeDirectory extends DurableObject<TowheeEnv> {
+  private readonly sql: SqlStorage;
+
+  constructor(ctx: DurableObjectState, env: TowheeEnv) {
+    super(ctx, env);
+    this.sql = ctx.storage.sql;
+    this.sql.exec("CREATE TABLE IF NOT EXISTS towhee_rooms (room TEXT PRIMARY KEY)");
+  }
+
+  async add(room: string): Promise<void> {
+    this.sql.exec("INSERT OR IGNORE INTO towhee_rooms (room) VALUES (?)", room);
+  }
+
+  async remove(room: string): Promise<void> {
+    this.sql.exec("DELETE FROM towhee_rooms WHERE room = ?", room);
+  }
+
+  async list({ prefix, after, limit }: { prefix: string; after: string; limit: number }): Promise<string[]> {
+    return this.sql
+      .exec("SELECT room FROM towhee_rooms WHERE substr(room, 1, ?) = ? AND room > ? ORDER BY room LIMIT ?", prefix.length, prefix, after, limit)
+      .toArray()
+      .map((r) => r.room as string);
   }
 }
 

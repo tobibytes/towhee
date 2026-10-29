@@ -193,7 +193,12 @@ describe("rooms on Durable Objects", () => {
     await until(() => bob.status === "disconnected", "bob removed");
     expect(bob.lastError?.code).toBe("removed");
 
+    const list = async () =>
+      ((await (await exports.default.fetch("http://towhee.test/v1/admin/rooms?prefix=cf:adm", { headers: { authorization: `Bearer ${admin}` } })).json()) as { rooms: string[] }).rooms;
+    expect(await list()).toEqual(["cf:admin"]);
+
     expect(await (await call("cf:admin", { method: "DELETE" })).json()).toEqual({ deleted: true });
+    expect(await list()).toEqual([]);
     await until(() => ada.status === "disconnected", "ada closed");
     expect(ada.lastError?.code).toBe("room_deleted");
     expect((await call("cf:admin")).status).toBe(404);

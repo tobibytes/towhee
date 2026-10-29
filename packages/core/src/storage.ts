@@ -22,6 +22,11 @@ export interface Storage {
   inbox: InboxStore;
   /** Deletes the room's document, update log, threads and versions. */
   deleteRoom(room: string): Promise<void>;
+  /**
+   * Ids of rooms with anything saved (document, threads or versions), in order, after `after`,
+   * starting with `prefix`. Optional: the admin API's room list needs it.
+   */
+  listRooms?(options: { prefix?: string; after?: string; limit: number }): Promise<string[]>;
 }
 
 /**
@@ -99,6 +104,11 @@ export interface VersionStore {
 export class MemoryVersionStore implements VersionStore {
   private readonly rooms = new Map<string, Map<string, { version: Version; state: Uint8Array }>>();
 
+  /** Rooms with at least one version. */
+  roomIds(): string[] {
+    return [...this.rooms].filter(([, v]) => v.size > 0).map(([id]) => id);
+  }
+
   async save(room: string, version: Version, state: Uint8Array): Promise<void> {
     let versions = this.rooms.get(room);
     if (!versions) {
@@ -141,6 +151,11 @@ export interface ThreadStore {
 export class MemoryThreadStore implements ThreadStore {
   private readonly rooms = new Map<string, Map<string, Thread>>();
 
+  /** Rooms with at least one thread. */
+  roomIds(): string[] {
+    return [...this.rooms].filter(([, t]) => t.size > 0).map(([id]) => id);
+  }
+
   async list(room: string): Promise<Thread[]> {
     // Stable sort over insertion order: threads created in the same millisecond stay in creation order.
     return [...(this.rooms.get(room)?.values() ?? [])].map((t) => structuredClone(t)).sort((a, b) => a.createdAt - b.createdAt);
@@ -172,8 +187,8 @@ export class MemoryThreadStore implements ThreadStore {
 /** Keeps documents in memory. For tests, and for trying Towhee without a database. */
 export class MemoryStorage implements Storage {
   private readonly rooms = new Map<string, { state: Uint8Array | null; log: Uint8Array[] }>();
-  readonly threads: ThreadStore = new MemoryThreadStore();
-  readonly versions: VersionStore = new MemoryVersionStore();
+  readonly threads = new MemoryThreadStore();
+  readonly versions = new MemoryVersionStore();
   readonly inbox: InboxStore = new MemoryInboxStore();
 
   async loadDocument(room: string): Promise<Uint8Array | null> {
@@ -191,6 +206,11 @@ export class MemoryStorage implements Storage {
 
   async compact(room: string, state: Uint8Array): Promise<void> {
     this.rooms.set(room, { state: state.slice(), log: [] });
+  }
+
+  async listRooms({ prefix = "", after = "", limit }: { prefix?: string; after?: string; limit: number }): Promise<string[]> {
+    const ids = new Set([...this.rooms.keys(), ...this.threads.roomIds(), ...this.versions.roomIds()]);
+    return [...ids].filter((r) => r.startsWith(prefix) && r > after).sort().slice(0, limit);
   }
 
   async deleteRoom(room: string): Promise<void> {

@@ -343,7 +343,12 @@ describe("admin API", () => {
     expect(bob.lastError?.code).toBe("removed");
     expect(ada.status).toBe("connected");
 
+    const listed = (await (await fetch(`${http(url)}/v1/admin/rooms?prefix=doc:`, { headers: { authorization: `Bearer ${admin}` } })).json()) as { rooms: string[] };
+    expect(listed.rooms).toContain("doc:1");
+
     expect(await (await call("doc:1", { method: "DELETE" })).json()).toEqual({ deleted: true });
+    const after = (await (await fetch(`${http(url)}/v1/admin/rooms?prefix=doc:`, { headers: { authorization: `Bearer ${admin}` } })).json()) as { rooms: string[] };
+    expect(after.rooms).not.toContain("doc:1");
     await until(() => ada.status === "disconnected", "ada closed");
     expect(ada.lastError?.code).toBe("room_deleted");
     expect((await call("doc:1")).status).toBe(404);

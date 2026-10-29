@@ -1,1 +1,1 @@
-export { default, TowheeInbox, TowheeRoom } from "@towhee/cloudflare";
+export { default, TowheeDirectory, TowheeInbox, TowheeRoom } from "@towhee/cloudflare";
