@@ -1,6 +1,6 @@
 import { PageShell, Section, Container, SectionHeading } from "@junco/blocks/marketing";
 import { Badge, Button } from "@junco/react";
-import { Footer, GITHUB, Header, JUNCO } from "../site/layout";
+import { Footer, GITHUB, Header, JUNCO, JUNCO_COLLAB, JUNCO_EXAMPLE } from "../site/layout";
 import { Screenshot } from "../site/screenshot";
 
 const shots = [
@@ -33,6 +33,9 @@ export function Examples() {
             <Button asChild variant="outline">
               <a href={`${GITHUB}/tree/main/apps/site/src/demo`}>Read the source</a>
             </Button>
+            <Button asChild variant="ghost">
+              <a href={JUNCO_EXAMPLE}>See it on Junco&apos;s examples</a>
+            </Button>
           </div>
           <div className="grid gap-16">
             {shots.map((s, i) => (
@@ -56,6 +59,19 @@ export function Examples() {
               <li>History: save, restore, and undo through a Yjs UndoManager</li>
               <li>Anonymous demo tokens, limited to demo:* rooms</li>
             </ul>
+          </div>
+          <div className="grid gap-3 rounded-card border border-border p-6 sm:grid-cols-[1fr_auto] sm:items-center">
+            <div className="grid gap-1">
+              <h2 className="text-xl font-semibold tracking-tight">Build your own, faster</h2>
+              <p className="text-pretty text-muted-foreground">
+                The board&apos;s interface became <a className="underline underline-offset-4" href={JUNCO_COLLAB}>@junco/collab</a>: avatar
+                stack, live cursors, who&apos;s-editing bar, comments with mentions, version history and an inbox, ready to plug into
+                Towhee with one adapter.
+              </p>
+            </div>
+            <Button asChild variant="outline">
+              <a href={JUNCO_COLLAB}>Try the components</a>
+            </Button>
           </div>
         </Container>
       </Section>

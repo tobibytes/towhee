@@ -1,8 +1,8 @@
 import { Bell, History, MessagesSquare, MousePointer2, RefreshCw, Server } from "lucide-react";
 import { Container, CtaSection, FeatureGrid, Hero, PageShell, Section, SectionHeading } from "@junco/blocks/marketing";
-import { Badge } from "@junco/react";
+import { Badge, Button } from "@junco/react";
 import { Code } from "../site/code";
-import { Footer, GITHUB, Header, JUNCO } from "../site/layout";
+import { Footer, GITHUB, Header, JUNCO, JUNCO_COLLAB } from "../site/layout";
 import { Screenshot } from "../site/screenshot";
 
 const features = [
@@ -76,6 +76,26 @@ export function Home() {
               <Code code={clientSample} title="app.ts" />
             </div>
           </div>
+        </Container>
+      </Section>
+
+      <Section>
+        <Container className="grid gap-6 rounded-card border border-border bg-surface p-6 sm:p-10 lg:grid-cols-[1fr_auto] lg:items-center">
+          <SectionHeading
+            align="start"
+            eyebrow="Ready-made UI"
+            title="Pair it with Junco"
+            description={
+              <>
+                <a className="underline underline-offset-4" href={JUNCO}>Junco</a>&apos;s <code className="font-mono text-sm">@junco/collab</code>{" "}
+                draws the avatar stack, live cursors, comments, version history, inbox and connection status. Hand it a Towhee room and
+                it&apos;s live.
+              </>
+            }
+          />
+          <Button asChild variant="outline">
+            <a href={JUNCO_COLLAB}>See the components</a>
+          </Button>
         </Container>
       </Section>
 
