@@ -84,6 +84,16 @@ A session is done when its "Done when" list is true, CI is green and the PR is m
 
 **Done when:** mentioning a user puts a notification in their inbox live, in both hosts; read state syncs across their tabs; the webhook arrives with a valid signature and retries on failure.
 
+## 8b. Site and live demo
+
+- [x] `apps/site`: landing page, docs (client, tokens, Cloudflare, Docker, managing a server, reference) and examples, built with Junco
+- [x] Towhee Board demo at `/demo`: cards on a shared Yjs map, cursors, comments with mentions, inbox, history restore with undo
+- [x] Demo token endpoint in `deploy/cloudflare` (anonymous bird names, a cookie per browser, `demo:*` rooms only, its own key, rate limited)
+- [x] Screenshots in `apps/site/public/screenshots`, light and dark, taken with two users on one board
+- [x] Mentions carry an optional `name`, so inbox excerpts and webhooks read "@Ada" rather than a user id
+
+**Done when:** two browsers on towhee.madebytobi.com/demo see each other's cursors and edits, mention each other into their inboxes, and restore a version.
+
 ## 9. React
 
 - [ ] `@towhee/react`: `TowheeProvider`, `RoomProvider`, `useRoom`, `useStatus`, `useSelf`, `useOthers`, `useUpdatePresence`, `useThreads`, `useHistory`, `useInbox`
@@ -103,7 +113,7 @@ A session is done when its "Done when" list is true, CI is green and the PR is m
 ## 11. Collaborative docs demo
 
 - [ ] A docs editor page on the Junco site: TipTap on Yjs, with cursors, comments, history and inbox through Towhee
-- [ ] A Towhee deployment on Tobi's Cloudflare account and a small token endpoint for the demo (anonymous users, demo rooms only, rooms reset daily)
+- [ ] A Towhee deployment on Tobi's Cloudflare account and a small token endpoint for the demo (anonymous users, demo rooms only, rooms reset daily). The deployment and token endpoint exist since 8b; daily reset doesn't yet
 
 **Done when:** two browsers on the live Junco site edit, comment and restore versions together.
 

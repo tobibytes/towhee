@@ -1,4 +1,4 @@
-import { isRoomUser, isValidUserId, type RoomUser } from "./user";
+import { isRoomUser, isValidUserId, MAX_USER_NAME_LENGTH, type RoomUser } from "./user";
 
 /**
  * Where a thread points. `text` holds two Yjs relative positions (base64 of
@@ -39,6 +39,8 @@ export interface LinkRun {
 export interface Mention {
   type: "mention";
   userId: string;
+  /** How the author saw them when mentioning, for places that can't look names up (inbox excerpts, webhooks). */
+  name?: string;
 }
 
 export interface Comment {
@@ -126,7 +128,13 @@ function isSafeUrl(value: unknown): value is string {
 function isInline(value: unknown): value is Inline {
   if (isTextRun(value)) return true;
   if (!isRecord(value)) return false;
-  if (value.type === "mention") return onlyKeys(value, ["type", "userId"]) && isValidUserId(value.userId);
+  if (value.type === "mention") {
+    return (
+      onlyKeys(value, ["type", "userId", "name"]) &&
+      isValidUserId(value.userId) &&
+      (value.name === undefined || (typeof value.name === "string" && value.name.length > 0 && value.name.length <= MAX_USER_NAME_LENGTH))
+    );
+  }
   if (value.type === "link") {
     return (
       onlyKeys(value, ["type", "url", "children"]) &&
@@ -189,10 +197,10 @@ export function textBody(text: string): CommentBody {
   return { version: 1, content: text.split("\n").map((line) => ({ type: "paragraph", children: line ? [{ type: "text", text: line }] : [] })) };
 }
 
-/** A body as plain text, with mentions as `@userId`. */
+/** A body as plain text, with mentions as `@name`, or `@userId` when the mention has no name. */
 export function bodyText(body: CommentBody): string {
   const inline = (c: Inline): string =>
-    c.type === "text" ? c.text : c.type === "mention" ? `@${c.userId}` : c.children.map((t) => t.text).join("");
+    c.type === "text" ? c.text : c.type === "mention" ? `@${c.name ?? c.userId}` : c.children.map((t) => t.text).join("");
   return body.content.map((p) => p.children.map(inline).join("")).join("\n");
 }
 

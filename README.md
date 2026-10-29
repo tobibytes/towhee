@@ -10,6 +10,8 @@ A self-hosted realtime collaboration engine. Run it on Cloudflare or anywhere No
 
 Your app keeps its users. Its backend signs a short-lived token for each room, and Towhee checks it.
 
+**Try it:** [towhee.madebytobi.com/demo](https://towhee.madebytobi.com/demo) is a shared board. Open it in two windows. Docs are at [towhee.madebytobi.com/docs](https://towhee.madebytobi.com/docs).
+
 > **Status:** early. The plan is in [docs/PLAN.md](docs/PLAN.md) and the build order in [docs/SESSIONS.md](docs/SESSIONS.md). Nothing is published yet.
 
 ## Packages
@@ -23,6 +25,7 @@ Your app keeps its users. Its backend signs a short-lived token for each room, a
 | `@towhee/cloudflare` | Worker + Durable Objects |
 | `@towhee/client` | Browser and Node client |
 | `@towhee/react` | React hooks |
+| `apps/site` | towhee.madebytobi.com: landing page, docs, examples and the live demo (private, built with Junco) |
 
 UI components for all of this live in [Junco](https://github.com/tobibytes/junco) (`@junco/collab`).
 
