@@ -14,6 +14,10 @@ export function Reference() {
           [<C key="2">GET /health</C>, "Liveness"],
           [<C key="3">wss /v1/rooms/&lt;room&gt;</C>, "A room: document, presence, threads, history. First frame must be auth with a room token"],
           [<C key="4">wss /v1/inbox/&lt;user&gt;</C>, "A user's notifications, with an inbox token for that user"],
+          [<C key="5">GET /v1/admin/rooms/&lt;room&gt;</C>, "Admin: connections, users, document size, thread and version counts"],
+          [<C key="6">GET /v1/admin/rooms/&lt;room&gt;/export</C>, "Admin: document (base64 Yjs update), threads and versions"],
+          [<C key="7">POST /v1/admin/rooms/&lt;room&gt;/kick</C>, "Admin: disconnect a user, { \"userId\": \"...\" }"],
+          [<C key="8">DELETE /v1/admin/rooms/&lt;room&gt;</C>, "Admin: disconnect everyone and delete the room's data"],
         ]}
       />
 
@@ -52,6 +56,8 @@ export function Reference() {
           ["document_too_large", "4010", "stops"],
           ["room_full", "4011", "retries with backoff"],
           ["server_restarting", "4012", "retries with backoff"],
+          ["room_deleted", "4013", "stops (an admin deleted the room)"],
+          ["removed", "4014", "stops (an admin removed this user)"],
           ["rate_limited", "4029", "retries with backoff"],
           ["internal", "4500", "retries with backoff"],
         ]}

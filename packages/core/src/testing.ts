@@ -191,6 +191,27 @@ export function storageSuite(name: string, create: () => Storage | Promise<Stora
       expect((await storage.inbox.list("*", "bob", 10)).map((x) => x.id)).toEqual(["n5"]);
     });
 
+    it("deletes a room's document, threads and versions, and nothing else", async () => {
+      const storage = await create();
+      const { doc } = build("doomed");
+      const state = Y.encodeStateAsUpdate(doc);
+      const t = (id: string): Thread => ({ id, resolved: false, createdBy: "u1", createdAt: 1, updatedAt: 1, comments: [] });
+      for (const room of ["gone", "kept"]) {
+        await storage.compact(room, state);
+        await storage.appendUpdate(room, state);
+        await storage.threads.put(room, t(`t-${room}`));
+        await storage.versions.save(room, { id: `v-${room}`, kind: "manual", createdAt: 1, size: state.length }, state);
+      }
+      await storage.deleteRoom("gone");
+      expect(await storage.loadDocument("gone")).toBeNull();
+      expect(await storage.threads.list("gone")).toEqual([]);
+      expect(await storage.versions.list("gone")).toEqual([]);
+      expect(text((await storage.loadDocument("kept"))!)).toBe("doomed");
+      expect(await storage.threads.count("kept")).toBe(1);
+      expect((await storage.versions.list("kept")).map((v) => v.id)).toEqual(["v-kept"]);
+      await storage.deleteRoom("never-existed");
+    });
+
     it("stores large documents", async () => {
       const storage = await create();
       const { doc } = build("x".repeat(512 * 1024));

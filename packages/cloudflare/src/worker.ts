@@ -1,5 +1,19 @@
 import { type RoomKey, validateRoomKeys } from "@towhee/auth";
-import { type Connection, type ConnectionState, Inbox, type Limits, landingPage, Room, sendWebhook, type WebhookTarget } from "@towhee/core";
+import {
+  type AdminOps,
+  type Connection,
+  type ConnectionState,
+  handleAdmin,
+  Inbox,
+  isAdminPath,
+  type Limits,
+  landingPage,
+  Room,
+  type RoomExport,
+  type RoomInfo,
+  sendWebhook,
+  type WebhookTarget,
+} from "@towhee/core";
 import { closeCodeFor, isReservedRoomId, isValidRoomId, isValidUserId, type Notification, roomMatches } from "@towhee/protocol";
 import { DurableObject } from "cloudflare:workers";
 import { DurableObjectSqlStorage } from "./storage";
@@ -25,6 +39,8 @@ export interface TowheeEnv {
   TOWHEE_EXPIRE_ROOMS?: string;
   /** Default 24. */
   TOWHEE_EXPIRE_AFTER_HOURS?: string;
+  /** Turns on the admin API at /v1/admin (a secret, at least 32 characters). */
+  TOWHEE_ADMIN_SECRET?: string;
 }
 
 /** The Worker passes the room id or user id to the Durable Object in these headers. */
@@ -103,6 +119,16 @@ export async function handleRequest(request: Request, env: TowheeEnv): Promise<R
   if (url.pathname === "/health" && request.method === "GET") return Response.json({ ok: true });
   if (url.pathname === "/" && request.method === "GET") {
     return new Response(landingPage(url.origin), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=3600" } });
+  }
+  if (isAdminPath(url.pathname)) {
+    const stub = (id: string) => env.TOWHEE_ROOMS.getByName(id);
+    const ops: AdminOps = {
+      info: (id) => stub(id).adminInfo(id),
+      export: (id) => stub(id).adminExport(id),
+      delete: (id) => stub(id).adminDelete(id),
+      kick: (id, userId) => stub(id).adminKick(id, userId),
+    };
+    return handleAdmin(request, env.TOWHEE_ADMIN_SECRET, ops);
   }
   const room = ROOM_PATH.exec(url.pathname);
   const inbox = INBOX_PATH.exec(url.pathname);
@@ -239,7 +265,13 @@ abstract class SocketHost<Target extends Hosted> extends DurableObject<TowheeEnv
   }
 
   private async closed(ws: WebSocket, code: number): Promise<void> {
-    const target = await this.getTarget();
+    let target: Target;
+    try {
+      target = await this.getTarget();
+    } catch {
+      // The room was deleted while this socket was closing: nothing left to tidy up.
+      return;
+    }
     target.disconnect(this.connection(ws));
     try {
       // Completes the close handshake (1005/1006 can't be sent back).
@@ -335,6 +367,48 @@ export class TowheeRoom extends SocketHost<Room> {
 
   protected override afterRestore(room: Room, restored: number): void {
     if (restored > 0) room.requestPresence();
+  }
+
+  /* Admin (called by the Worker over RPC) ------------------------------------------------------ */
+
+  /** This object's room, if it is that room and has ever been opened. An admin look never creates one. */
+  private isRoom(id: string): boolean {
+    return this.storage.getMeta("room") === id;
+  }
+
+  async adminInfo(id: string): Promise<RoomInfo | null> {
+    if (!this.isRoom(id)) return null;
+    const room = await this.getTarget();
+    const info = await room.info();
+    await this.afterEvent(room);
+    return info;
+  }
+
+  async adminExport(id: string): Promise<RoomExport | null> {
+    if (!this.isRoom(id)) return null;
+    const room = await this.getTarget();
+    const data = await room.export();
+    await this.afterEvent(room);
+    return data;
+  }
+
+  async adminKick(id: string, userId: string): Promise<number> {
+    if (!this.isRoom(id)) return 0;
+    const room = await this.getTarget();
+    const closed = room.kick(userId);
+    await this.afterEvent(room);
+    return closed;
+  }
+
+  /** Disconnects everyone with `room_deleted` and erases this object's storage. */
+  async adminDelete(id: string): Promise<boolean> {
+    if (!this.isRoom(id)) return false;
+    const room = await this.getTarget();
+    await room.close("room_deleted");
+    this.forget();
+    await this.ctx.storage.deleteAlarm();
+    await this.storage.clear();
+    return true;
   }
 
   /**

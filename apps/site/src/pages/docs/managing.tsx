@@ -1,6 +1,6 @@
 import { Code, C } from "../../site/code";
 import { GITHUB } from "../../site/layout";
-import { A, H1, H2, List, Note, P } from "./layout";
+import { A, H1, H2, List, P } from "./layout";
 
 export function Managing() {
   return (
@@ -113,10 +113,35 @@ export async function POST(request) {
         versions, everything. A room that still has people in it waits until the last one leaves. Someone who kept the old board open
         offline and comes back later brings their copy with them, as with any Yjs document.
       </P>
-      <Note title="Coming later">
-        An admin API (list rooms, export and delete a room, revoke a user) is planned. Today, managing data means working with the
-        storage directly.
-      </Note>
+      <H2 id="admin">Admin API</H2>
+      <P>
+        Set <C>TOWHEE_ADMIN_SECRET</C> (32+ random characters; a Worker secret on Cloudflare) to turn on{" "}
+        <C>/v1/admin</C>. Every request needs <C>Authorization: Bearer &lt;secret&gt;</C>. Without the secret the API doesn&apos;t exist.
+      </P>
+      <Code
+        title="Look, export, remove someone, delete"
+        code={`A="Authorization: Bearer $TOWHEE_ADMIN_SECRET"
+curl -H "$A" https://towhee.example.com/v1/admin/rooms/doc:42          # who's here, sizes, counts
+curl -H "$A" https://towhee.example.com/v1/admin/rooms/doc:42/export   # document (base64 Yjs), threads, versions
+curl -H "$A" -X POST -d '{"userId":"u_123"}' https://towhee.example.com/v1/admin/rooms/doc:42/kick
+curl -H "$A" -X DELETE https://towhee.example.com/v1/admin/rooms/doc:42`}
+      />
+      <List
+        items={[
+          <>
+            <C>kick</C> closes that user&apos;s connections with <C>removed</C>, and their client stops instead of reconnecting. Their
+            token stays valid until it expires, so also stop your token endpoint from signing new ones for them.
+          </>,
+          <>
+            <C>DELETE</C> closes everyone with <C>room_deleted</C> (clients stop, so nobody writes the old copy back) and erases the
+            document, update log, threads and versions. Notifications already in inboxes stay.
+          </>,
+          <>
+            The export&apos;s <C>document</C> is one Yjs update: <C>Y.applyUpdate(new Y.Doc(), base64Decode(document))</C> rebuilds it.
+          </>,
+          <>Listing every room isn&apos;t there yet: Cloudflare can&apos;t enumerate Durable Objects without an index of its own.</>,
+        ]}
+      />
     </>
   );
 }

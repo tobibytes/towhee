@@ -1,6 +1,7 @@
 export { DEFAULT_LIMITS, type Limits, resolveLimits } from "./limits";
 export { decodePresence, encodePresence, type PresenceEntry } from "./presence";
-export { type Connection, type ConnectionState, Room, type RoomOptions, type Timers } from "./room";
+export { type AdminOps, handleAdmin, isAdminPath, MIN_ADMIN_SECRET_LENGTH } from "./admin";
+export { type Connection, type ConnectionState, Room, type RoomExport, type RoomInfo, type RoomOptions, type Timers } from "./room";
 export { History } from "./history";
 export {
   type InboxStore,

@@ -51,6 +51,7 @@ npx wrangler deploy`}
           [<C key="2">TOWHEE_KEYS</C>, "secret", "Several keys as JSON, instead of TOWHEE_SECRET"],
           [<C key="3">TOWHEE_WEBHOOK_URL</C>, "var", "POST each notification to your app"],
           [<C key="4">TOWHEE_WEBHOOK_SECRET</C>, "secret", "Signs those webhooks (32+ characters)"],
+          [<C key="11">TOWHEE_ADMIN_SECRET</C>, "secret", "Turns on the admin API at /v1/admin (32+ characters)"],
           [<C key="5">TOWHEE_MAX_CONNECTIONS</C>, "var", "Per room (default 100)"],
           [<C key="6">TOWHEE_MAX_MESSAGE_BYTES</C>, "var", "Default 1 MB"],
           [<C key="7">TOWHEE_MAX_DOCUMENT_BYTES</C>, "var", "Default 50 MB"],

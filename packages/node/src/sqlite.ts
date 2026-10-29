@@ -60,6 +60,17 @@ export class SqliteStorage implements Storage {
     this.statements.append.run(room, update);
   }
 
+  async deleteRoom(room: string): Promise<void> {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      for (const table of ["documents", "updates", "threads", "versions"]) this.db.prepare(`DELETE FROM ${table} WHERE room = ?`).run(room);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
   async compact(room: string, state: Uint8Array): Promise<void> {
     // One transaction: a crash leaves either the old state and log or the new state, never neither.
     this.db.exec("BEGIN IMMEDIATE");

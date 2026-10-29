@@ -17,6 +17,8 @@
     // A dummy test key, not a real secret.
     "TOWHEE_SECRET": "cloudflare-test-key-not-a-secret-0000",
     "TOWHEE_AUTH_TIMEOUT_MS": "300",
-    "TOWHEE_EXPIRE_ROOMS": "cf:expire-*"
+    "TOWHEE_EXPIRE_ROOMS": "cf:expire-*",
+    // A dummy admin secret for the admin API tests.
+    "TOWHEE_ADMIN_SECRET": "cloudflare-admin-test-secret-00000000"
   }
 }

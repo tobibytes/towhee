@@ -16,6 +16,8 @@ import {
   type RequestMessage,
   type RoomUser,
   type ServerMessage,
+  type Thread,
+  type Version,
 } from "@towhee/protocol";
 import * as decoding from "lib0/decoding";
 import * as encoding from "lib0/encoding";
@@ -36,6 +38,29 @@ export interface Connection {
 export interface Timers {
   setTimeout(callback: () => void, ms: number): unknown;
   clearTimeout(handle: unknown): void;
+}
+
+/** What an admin sees about a room. */
+export interface RoomInfo {
+  room: string;
+  /** Open connections, including ones still authenticating. */
+  connections: number;
+  /** Signed-in people, with how many connections each has. */
+  users: { id: string; name?: string; connections: number }[];
+  /** Size of the document's state, in bytes. */
+  documentBytes: number;
+  threads: number;
+  versions: number;
+}
+
+/** Everything a room holds, for an admin export. */
+export interface RoomExport {
+  room: string;
+  exportedAt: number;
+  /** The document as one Yjs update. */
+  document: Uint8Array;
+  threads: Thread[];
+  versions: Version[];
 }
 
 export interface RoomOptions {
@@ -343,6 +368,48 @@ export class Room {
       current = this.persisting;
       await current;
     } while (current !== this.persisting);
+  }
+
+  /* Admin -------------------------------------------------------------------------------------- */
+
+  async info(): Promise<RoomInfo> {
+    const users = new Map<string, { id: string; name?: string; connections: number }>();
+    for (const data of this.connections.values()) {
+      if (!data.user || data.phase === "closed") continue;
+      const entry = users.get(data.user.id) ?? { id: data.user.id, ...(data.user.name ? { name: data.user.name } : {}), connections: 0 };
+      entry.connections++;
+      users.set(entry.id, entry);
+    }
+    return {
+      room: this.id,
+      connections: this.connections.size,
+      users: [...users.values()],
+      documentBytes: Y.encodeStateAsUpdate(this.doc).length,
+      threads: await this.storage.threads.count(this.id),
+      versions: (await this.storage.versions.list(this.id)).length,
+    };
+  }
+
+  async export(): Promise<RoomExport> {
+    await this.flush();
+    return {
+      room: this.id,
+      exportedAt: this.now(),
+      document: Y.encodeStateAsUpdate(this.doc),
+      threads: await this.storage.threads.list(this.id),
+      versions: await this.storage.versions.list(this.id),
+    };
+  }
+
+  /** Disconnects every connection of this user with `removed`, so their client stops. Returns how many. */
+  kick(userId: string): number {
+    let closed = 0;
+    for (const [conn, data] of [...this.connections]) {
+      if (data.user?.id !== userId || data.phase === "closed") continue;
+      this.fail(conn, "removed", "An admin removed you from this room");
+      closed++;
+    }
+    return closed;
   }
 
   /** Closes every connection (default `server_restarting`), saves a compacted document and frees the room. */
