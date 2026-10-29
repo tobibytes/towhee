@@ -2,7 +2,7 @@ import { createServer as createHttpServer, type IncomingMessage, type Server } f
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
 import type { RoomKey } from "@towhee/auth";
-import { type Connection, Inbox, type Limits, Room, resolveLimits, type Storage, sendWebhook, type WebhookTarget } from "@towhee/core";
+import { type Connection, Inbox, type Limits, landingPage, Room, resolveLimits, type Storage, sendWebhook, type WebhookTarget } from "@towhee/core";
 import { closeCodeFor, encodeMessage, isReservedRoomId, isValidRoomId, isValidUserId, type Notification } from "@towhee/protocol";
 import { type RawData, type WebSocket, WebSocketServer } from "ws";
 import { SqliteStorage } from "./sqlite";
@@ -82,6 +82,13 @@ export class TowheeServer {
       if (req.method === "GET" && req.url === "/health") {
         res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
         res.end(JSON.stringify({ ok: true, rooms: this.active.size, connections: this.wss.clients.size }));
+        return;
+      }
+      if (req.method === "GET" && req.url === "/") {
+        // Behind a TLS proxy the public scheme is https; say so in the page's URLs.
+        const scheme = req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        res.end(landingPage(`${scheme}://${req.headers.host ?? "localhost"}`));
         return;
       }
       res.writeHead(404, { "content-type": "text/plain" });

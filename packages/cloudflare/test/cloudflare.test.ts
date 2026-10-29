@@ -79,6 +79,9 @@ describe("Worker", () => {
   it("answers health checks and refuses bad requests", async () => {
     const health = await exports.default.fetch("http://towhee.test/health");
     expect(await health.json()).toEqual({ ok: true });
+    const page = await exports.default.fetch("http://towhee.test/");
+    expect(page.headers.get("content-type")).toContain("text/html");
+    expect(await page.text()).toContain("ws://towhee.test/v1/rooms/&lt;room&gt;");
     expect((await exports.default.fetch("http://towhee.test/elsewhere")).status).toBe(404);
     expect((await exports.default.fetch("http://towhee.test/v1/rooms/doc:1")).status).toBe(426);
     const upgrade = { headers: { Upgrade: "websocket" } };

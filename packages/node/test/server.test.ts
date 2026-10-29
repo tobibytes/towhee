@@ -229,6 +229,9 @@ describe("server", () => {
     expect(health.status).toBe(200);
     expect(await health.json()).toEqual({ ok: true, rooms: 0, connections: 0 });
     expect((await fetch(`http://127.0.0.1:${port}/nope`)).status).toBe(404);
+    const page = await fetch(`http://127.0.0.1:${port}/`);
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain(`ws://127.0.0.1:${port}/v1/rooms/`);
 
     for (const path of ["/v1/rooms", "/v1/other/doc", "/v1/rooms/a%2Fb", "/v1/rooms/%E0%A4%A"]) {
       const status = await new Promise<number>((resolve) => {
