@@ -1,5 +1,13 @@
 # @towhee/react
 
+## 0.1.2
+
+### Patch Changes
+
+- Updated dependencies [5a7d088]
+  - @towhee/protocol@0.2.0
+  - @towhee/client@0.1.2
+
 ## 0.1.1
 
 ### Patch Changes
