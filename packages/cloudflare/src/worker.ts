@@ -1,5 +1,5 @@
 import { type RoomKey, validateRoomKeys } from "@towhee/auth";
-import { type Connection, type ConnectionState, Inbox, type Limits, Room, sendWebhook, type WebhookTarget } from "@towhee/core";
+import { type Connection, type ConnectionState, Inbox, type Limits, landingPage, Room, sendWebhook, type WebhookTarget } from "@towhee/core";
 import { closeCodeFor, isReservedRoomId, isValidRoomId, isValidUserId, type Notification } from "@towhee/protocol";
 import { DurableObject } from "cloudflare:workers";
 import { DurableObjectSqlStorage } from "./storage";
@@ -88,6 +88,9 @@ function decodeSegment(raw: string): string | undefined {
 export async function handleRequest(request: Request, env: TowheeEnv): Promise<Response> {
   const url = new URL(request.url);
   if (url.pathname === "/health" && request.method === "GET") return Response.json({ ok: true });
+  if (url.pathname === "/" && request.method === "GET") {
+    return new Response(landingPage(url.origin), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=3600" } });
+  }
   const room = ROOM_PATH.exec(url.pathname);
   const inbox = INBOX_PATH.exec(url.pathname);
   if (!room && !inbox) return new Response("Not found", { status: 404 });
