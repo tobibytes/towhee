@@ -144,6 +144,44 @@ describe("rooms on Durable Objects", () => {
     expect(text(b)).toBe("kept in sqlite");
   });
 
+  it("wipes expired rooms, but only once nobody is in them", async () => {
+    const stub = env.TOWHEE_ROOMS.getByName("cf:expire-a");
+    const a = join({}, "cf:expire-a");
+    await until(() => a.synced, "sync");
+    a.doc.getText("t").insert(0, "from yesterday");
+    await new Promise((r) => setTimeout(r, 50));
+    // Two days old (the default lifetime is a day), with someone still in it: nothing happens.
+    await runInDurableObject(stub, (_room: TowheeRoom, state) => new DurableObjectSqlStorage(state.storage).setMeta("created", String(Date.now() - 48 * 3_600_000)));
+    await runInDurableObject(stub, (room: TowheeRoom) => room.alarm());
+    const b = join({}, "cf:expire-a");
+    await until(() => b.synced && text(b) === "from yesterday", "the room to survive while in use");
+
+    // The last one out schedules the wipe; the alarm does it.
+    a.leave();
+    b.leave();
+    await new Promise((r) => setTimeout(r, 100));
+    await runDurableObjectAlarm(stub); // set for a past time, so it may already have run
+    const c = join({}, "cf:expire-a");
+    await until(() => c.synced, "sync after the wipe");
+    expect(text(c)).toBe("");
+    expect(await runInDurableObject(stub, (_room: TowheeRoom, state) => new DurableObjectSqlStorage(state.storage).getMeta("room"))).toBe("cf:expire-a");
+  });
+
+  it("never expires rooms outside TOWHEE_EXPIRE_ROOMS", async () => {
+    const stub = env.TOWHEE_ROOMS.getByName("cf:keep");
+    const a = join({}, "cf:keep");
+    await until(() => a.synced, "sync");
+    a.doc.getText("t").insert(0, "forever");
+    await new Promise((r) => setTimeout(r, 50));
+    a.leave();
+    await new Promise((r) => setTimeout(r, 50));
+    await runInDurableObject(stub, (_room: TowheeRoom, state) => new DurableObjectSqlStorage(state.storage).setMeta("created", "1"));
+    await runInDurableObject(stub, (room: TowheeRoom) => room.alarm());
+    const b = join({}, "cf:keep");
+    await until(() => b.synced, "sync");
+    expect(text(b)).toBe("forever");
+  });
+
   it("shares threads live and keeps them through an eviction", async () => {
     const a = join({ userId: "ada" }, "cf:threads");
     const b = join({ userId: "bob", access: "comment" }, "cf:threads");
