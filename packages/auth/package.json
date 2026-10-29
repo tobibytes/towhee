@@ -1,6 +1,6 @@
 {
   "name": "@towhee/auth",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Sign Towhee room and inbox tokens in your backend, and verify Towhee webhooks. WebCrypto only: Node, Workers, Deno and Bun.",
   "license": "MIT",
   "author": "Oluwatobi Olajide",

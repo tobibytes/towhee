@@ -1,5 +1,11 @@
 # @towhee/protocol
 
+## 0.1.1
+
+### Patch Changes
+
+- 24566ff: New logo and README on npm, clearer package descriptions.
+
 ## 0.1.0
 
 ### Minor Changes

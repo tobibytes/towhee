@@ -1,6 +1,6 @@
 {
   "name": "@towhee/core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The Towhee engine: rooms with Yjs sync and presence, comments, version history, inboxes and webhooks over any transport and storage.",
   "license": "MIT",
   "author": "Oluwatobi Olajide",
