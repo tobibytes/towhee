@@ -310,3 +310,52 @@ describe("configFromEnv", () => {
     expect(() => configFromEnv({ TOWHEE_SECRET: "s".repeat(32), PORT: "eighty" })).toThrow(/PORT/);
   });
 });
+
+describe("admin API", () => {
+  const admin = "s".repeat(32);
+  const http = (url: string) => url.replace(/^ws/, "http");
+
+  it("reports, exports, kicks and deletes rooms", async () => {
+    const { url } = await start(join(tempDir(), "t.sqlite"), 0, { adminSecret: admin });
+    const call = (path: string, init: RequestInit = {}) =>
+      fetch(`${http(url)}/v1/admin/rooms/${path}`, { ...init, headers: { authorization: `Bearer ${admin}`, ...init.headers } });
+
+    expect((await fetch(`${http(url)}/v1/admin/rooms/doc:1`)).status).toBe(401);
+    expect((await call("doc:none")).status).toBe(404);
+
+    const ada = enter(url, { userId: "ada", user: { name: "Ada" } });
+    const bob = enter(url, { userId: "bob" });
+    await until(() => ada.synced && bob.synced, "sync");
+    ada.doc.getText("t").insert(0, "kept for export");
+    await until(() => bob.doc.getText("t").toString() === "kept for export", "edit");
+
+    const info = (await (await call("doc:1")).json()) as { users: unknown[] };
+    expect(info).toMatchObject({ room: "doc:1", connections: 2, threads: 0 });
+    expect(info.users).toEqual(expect.arrayContaining([{ id: "ada", name: "Ada", connections: 1 }, { id: "bob", connections: 1 }]));
+
+    const exported = (await (await call("doc:1/export")).json()) as { document: string };
+    const copy = new Y.Doc();
+    Y.applyUpdate(copy, Buffer.from(exported.document, "base64"));
+    expect(copy.getText("t").toString()).toBe("kept for export");
+
+    expect(await (await call("doc:1/kick", { method: "POST", body: JSON.stringify({ userId: "bob" }) })).json()).toEqual({ closed: 1 });
+    await until(() => bob.status === "disconnected", "bob removed");
+    expect(bob.lastError?.code).toBe("removed");
+    expect(ada.status).toBe("connected");
+
+    expect(await (await call("doc:1", { method: "DELETE" })).json()).toEqual({ deleted: true });
+    await until(() => ada.status === "disconnected", "ada closed");
+    expect(ada.lastError?.code).toBe("room_deleted");
+    expect((await call("doc:1")).status).toBe(404);
+
+    const fresh = enter(url, { userId: "cy" });
+    await until(() => fresh.synced, "sync after delete");
+    expect(fresh.doc.getText("t").toString()).toBe("");
+  });
+
+  it("isn't served without a secret", async () => {
+    const { url } = await start(join(tempDir(), "t.sqlite"));
+    expect((await fetch(`${http(url)}/v1/admin/rooms/doc:1`, { headers: { authorization: `Bearer ${admin}` } })).status).toBe(404);
+  });
+});
+

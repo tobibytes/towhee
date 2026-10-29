@@ -27,6 +27,7 @@ function durableStorage(): Storage {
     loadDocument: (room) => call((s) => s.loadDocument(room)),
     appendUpdate: (room, update) => call((s) => s.appendUpdate(room, update)),
     compact: (room, state) => call((s) => s.compact(room, state)),
+    deleteRoom: (room) => call((s) => s.deleteRoom(room)),
     versions: {
       save: (room, version, state) => call((s) => s.versions.save(room, version, state)),
       list: (room) => call((s) => s.versions.list(room)),
@@ -165,6 +166,40 @@ describe("rooms on Durable Objects", () => {
     await until(() => c.synced, "sync after the wipe");
     expect(text(c)).toBe("");
     expect(await runInDurableObject(stub, (_room: TowheeRoom, state) => new DurableObjectSqlStorage(state.storage).getMeta("room"))).toBe("cf:expire-a");
+  });
+
+  it("serves the admin API: info, export, kick and delete", async () => {
+    const admin = "cloudflare-admin-test-secret-00000000";
+    const call = (path: string, init: RequestInit = {}) =>
+      exports.default.fetch(`http://towhee.test/v1/admin/rooms/${path}`, { ...init, headers: { authorization: `Bearer ${admin}`, ...init.headers } });
+    expect((await exports.default.fetch("http://towhee.test/v1/admin/rooms/cf:admin")).status).toBe(401);
+    expect((await call("cf:never-opened")).status).toBe(404);
+
+    const ada = join({ userId: "ada", user: { name: "Ada" } }, "cf:admin");
+    const bob = join({ userId: "bob" }, "cf:admin");
+    await until(() => ada.synced && bob.synced, "sync");
+    ada.doc.getText("t").insert(0, "exported");
+    await until(() => text(bob) === "exported", "edit");
+
+    const info = (await (await call("cf:admin")).json()) as { connections: number; users: { id: string }[] };
+    expect(info.connections).toBe(2);
+    expect(info.users.map((u) => u.id).sort()).toEqual(["ada", "bob"]);
+    const exported = (await (await call("cf:admin/export")).json()) as { document: string };
+    const copy = new Y.Doc();
+    Y.applyUpdate(copy, Uint8Array.from(atob(exported.document), (c) => c.charCodeAt(0)));
+    expect(copy.getText("t").toString()).toBe("exported");
+
+    expect(await (await call("cf:admin/kick", { method: "POST", body: JSON.stringify({ userId: "bob" }) })).json()).toEqual({ closed: 1 });
+    await until(() => bob.status === "disconnected", "bob removed");
+    expect(bob.lastError?.code).toBe("removed");
+
+    expect(await (await call("cf:admin", { method: "DELETE" })).json()).toEqual({ deleted: true });
+    await until(() => ada.status === "disconnected", "ada closed");
+    expect(ada.lastError?.code).toBe("room_deleted");
+    expect((await call("cf:admin")).status).toBe(404);
+    const fresh = join({ userId: "cy" }, "cf:admin");
+    await until(() => fresh.synced, "sync after delete");
+    expect(text(fresh)).toBe("");
   });
 
   it("never expires rooms outside TOWHEE_EXPIRE_ROOMS", async () => {

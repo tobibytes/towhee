@@ -22,6 +22,10 @@ export const ERROR_CODES = {
   room_full: 4011,
   /** The server is restarting or deploying. Reconnect shortly. */
   server_restarting: 4012,
+  /** An admin deleted the room. Its data is gone; don't reconnect with the old copy. */
+  room_deleted: 4013,
+  /** An admin removed this user from the room. */
+  removed: 4014,
   rate_limited: 4029,
   internal: 4500,
 } as const;

@@ -35,6 +35,7 @@ TOWHEE_SECRET=... npx towhee
 | `TOWHEE_MAX_DOCUMENT_BYTES` | `52428800` | |
 | `TOWHEE_WEBHOOK_URL` | | POST each notification to your app |
 | `TOWHEE_WEBHOOK_SECRET` | | Signs webhooks (at least 32 characters); check them with `verifyWebhook` |
+| `TOWHEE_ADMIN_SECRET` | | Turns on the admin API at `/v1/admin` (at least 32 characters) |
 
 ## In code
 

@@ -20,6 +20,8 @@ export interface Storage {
   versions: VersionStore;
   /** Users' notifications. */
   inbox: InboxStore;
+  /** Deletes the room's document, update log, threads and versions. */
+  deleteRoom(room: string): Promise<void>;
 }
 
 /**
@@ -189,6 +191,12 @@ export class MemoryStorage implements Storage {
 
   async compact(room: string, state: Uint8Array): Promise<void> {
     this.rooms.set(room, { state: state.slice(), log: [] });
+  }
+
+  async deleteRoom(room: string): Promise<void> {
+    this.rooms.delete(room);
+    for (const t of await this.threads.list(room)) await this.threads.delete(room, t.id);
+    for (const v of await this.versions.list(room)) await this.versions.delete(room, v.id);
   }
 
   /** Number of log entries since the last compaction, for tests. */

@@ -1,8 +1,21 @@
-import { createServer as createHttpServer, type IncomingMessage, type Server } from "node:http";
+import { createServer as createHttpServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
 import type { RoomKey } from "@towhee/auth";
-import { type Connection, Inbox, type Limits, landingPage, Room, resolveLimits, type Storage, sendWebhook, type WebhookTarget } from "@towhee/core";
+import {
+  type AdminOps,
+  type Connection,
+  handleAdmin,
+  Inbox,
+  isAdminPath,
+  type Limits,
+  landingPage,
+  Room,
+  resolveLimits,
+  type Storage,
+  sendWebhook,
+  type WebhookTarget,
+} from "@towhee/core";
 import { closeCodeFor, encodeMessage, isReservedRoomId, isValidRoomId, isValidUserId, type Notification } from "@towhee/protocol";
 import { type RawData, type WebSocket, WebSocketServer } from "ws";
 import { SqliteStorage } from "./sqlite";
@@ -23,6 +36,8 @@ export interface ServerOptions {
   onError?: (error: unknown, room?: string) => void;
   /** Where to POST each notification, signed with the secret (see `verifyWebhook` in `@towhee/auth`). */
   webhook?: WebhookTarget;
+  /** Turns on the admin API at /v1/admin (see `handleAdmin`). At least 32 characters. */
+  adminSecret?: string;
 }
 
 interface ActiveRoom {
@@ -57,6 +72,7 @@ export class TowheeServer {
   /** Inboxes hold no state of their own (it's all in storage), so they live only while used. */
   private readonly inboxes = new Map<string, Inbox>();
   private readonly webhook?: WebhookTarget;
+  private readonly adminSecret?: string;
   private readonly heartbeat: ReturnType<typeof setInterval>;
   private stopped = false;
 
@@ -72,6 +88,8 @@ export class TowheeServer {
       throw new TypeError("webhook needs an http(s) url and a secret of at least 32 characters");
     }
     this.webhook = options.webhook;
+    if (options.adminSecret !== undefined && options.adminSecret.length < 32) throw new TypeError("adminSecret must be at least 32 characters");
+    this.adminSecret = options.adminSecret;
 
     this.wss = new WebSocketServer({
       noServer: true,
@@ -79,6 +97,14 @@ export class TowheeServer {
       maxPayload: this.limits.maxMessageBytes * 2,
     });
     this.http = createHttpServer((req, res) => {
+      if (isAdminPath(new URL(req.url ?? "/", "http://localhost").pathname)) {
+        this.admin(req, res).catch((error) => {
+          this.onError(error);
+          if (!res.headersSent) res.writeHead(500, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "Internal error" }));
+        });
+        return;
+      }
       if (req.method === "GET" && req.url === "/health") {
         res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
         res.end(JSON.stringify({ ok: true, rooms: this.active.size, connections: this.wss.clients.size }));
@@ -278,6 +304,81 @@ export class TowheeServer {
         (error: unknown) => this.onError(error),
       );
     }
+  }
+
+  /* Admin ------------------------------------------------------------------------------------- */
+
+  private async admin(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of req as AsyncIterable<Buffer>) {
+      size += chunk.length;
+      if (size > 64 * 1024) {
+        res.writeHead(413, { "content-type": "application/json" }).end(JSON.stringify({ error: "Too large" }));
+        return;
+      }
+      chunks.push(chunk);
+    }
+    const headers = new Headers();
+    for (const [name, value] of Object.entries(req.headers)) if (typeof value === "string") headers.set(name, value);
+    const method = req.method ?? "GET";
+    const request = new Request(`http://localhost${req.url ?? "/"}`, {
+      method,
+      headers,
+      ...(method === "GET" || method === "HEAD" || chunks.length === 0 ? {} : { body: Buffer.concat(chunks) }),
+    });
+    const response = await handleAdmin(request, this.adminSecret, this.adminOps);
+    res.writeHead(response.status, Object.fromEntries(response.headers));
+    res.end(Buffer.from(await response.arrayBuffer()));
+  }
+
+  private readonly adminOps: AdminOps = {
+    info: async (id) => (await this.existingRoom(id))?.info() ?? null,
+    export: async (id) => (await this.existingRoom(id))?.export() ?? null,
+    delete: (id) => this.deleteRoom(id),
+    kick: async (id, userId) => {
+      const entry = this.active.get(id);
+      return entry ? (await entry.room).kick(userId) : 0;
+    },
+  };
+
+  private async hasData(id: string): Promise<boolean> {
+    return (
+      (await this.storage.loadDocument(id)) !== null ||
+      (await this.storage.threads.count(id)) > 0 ||
+      (await this.storage.versions.list(id)).length > 0
+    );
+  }
+
+  /** A room that's loaded or has saved data, loaded; null otherwise (an admin look never creates one). */
+  private async existingRoom(id: string): Promise<Room | null> {
+    if (!this.active.has(id) && !(await this.hasData(id))) return null;
+    const room = await this.room(id);
+    if (room.connectionCount === 0) this.scheduleUnload(id);
+    return room;
+  }
+
+  /** Disconnects everyone with `room_deleted`, then deletes the room's data. The room can't load until that's done. */
+  private async deleteRoom(id: string): Promise<boolean> {
+    const entry = this.active.get(id);
+    if (!entry && !(await this.hasData(id))) return false;
+    if (entry) {
+      this.active.delete(id);
+      clearTimeout(entry.unloadTimer);
+    }
+    const previous = this.closing.get(id);
+    const work = (async () => {
+      await previous;
+      const room = entry ? await entry.room.catch(() => null) : null;
+      await room?.close("room_deleted");
+      await this.storage.deleteRoom(id);
+    })();
+    const tracked = work.finally(() => {
+      if (this.closing.get(id) === tracked) this.closing.delete(id);
+    });
+    this.closing.set(id, tracked);
+    await tracked;
+    return true;
   }
 
   /* Rooms ------------------------------------------------------------------------------------- */

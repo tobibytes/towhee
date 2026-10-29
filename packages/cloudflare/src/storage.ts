@@ -63,6 +63,14 @@ export class DurableObjectSqlStorage implements Storage {
     this.sql.exec("INSERT INTO towhee_updates (room, data) VALUES (?, ?)", room, toBlob(update));
   }
 
+  async deleteRoom(room: string): Promise<void> {
+    this.storage.transactionSync(() => {
+      for (const table of ["towhee_state", "towhee_updates", "towhee_threads", "towhee_versions", "towhee_version_chunks"]) {
+        this.sql.exec(`DELETE FROM ${table} WHERE room = ?`, room);
+      }
+    });
+  }
+
   async compact(room: string, state: Uint8Array): Promise<void> {
     this.storage.transactionSync(() => {
       this.sql.exec("DELETE FROM towhee_state WHERE room = ?", room);

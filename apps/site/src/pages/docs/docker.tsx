@@ -59,6 +59,7 @@ process.on("SIGTERM", () => server.close()); // saves every room`}
           [<C key="3">TOWHEE_DATA</C>, "./data/towhee.sqlite", "SQLite file"],
           [<C key="4">PORT / TOWHEE_PORT</C>, "8080", ""],
           [<C key="5">TOWHEE_HOST</C>, "0.0.0.0", ""],
+          [<C key="12">TOWHEE_ADMIN_SECRET</C>, "", "Turns on the admin API at /v1/admin (32+ characters)"],
           [<C key="6">TOWHEE_UNLOAD_AFTER_MS</C>, "30000", "How long an empty room stays in memory"],
           [<C key="7">TOWHEE_MAX_CONNECTIONS</C>, "100", "Per room"],
           [<C key="8">TOWHEE_MAX_MESSAGE_BYTES</C>, "1048576", ""],

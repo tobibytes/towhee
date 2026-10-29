@@ -112,10 +112,17 @@ A session is done when its "Done when" list is true, CI is green and the PR is m
 
 ## 11. Collaborative docs demo
 
-- [ ] A docs editor page on the Junco site: TipTap on Yjs, with cursors, comments, history and inbox through Towhee
+- [x] A docs editor page on the Junco site: TipTap on Yjs, with cursors, comments, history and inbox through Towhee (junco /editor, `@junco/editor`)
 - [ ] A Towhee deployment on Tobi's Cloudflare account and a small token endpoint for the demo (anonymous users, demo rooms only, rooms reset daily). The deployment, token endpoint and daily reset (`TOWHEE_EXPIRE_ROOMS`) exist since 8b
 
 **Done when:** two browsers on the live Junco site edit, comment and restore versions together.
+
+## 13. Admin API
+
+- [x] `TOWHEE_ADMIN_SECRET` turns on `/v1/admin` on both hosts: room info, export, kick a user, delete a room
+- [x] Close codes `room_deleted` and `removed`, which stop clients instead of reconnecting
+- [x] `Storage.deleteRoom`, covered by the shared storage suite
+- [ ] Listing rooms (needs an index on Cloudflare)
 
 ## 12. Release v0.1
 

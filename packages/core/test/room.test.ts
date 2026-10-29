@@ -444,6 +444,7 @@ describe("persistence", () => {
         throw new Error("disk full");
       },
       compact: async () => {},
+      deleteRoom: async () => {},
       threads: new MemoryThreadStore(),
       versions: new MemoryVersionStore(),
       inbox: new MemoryInboxStore(),
