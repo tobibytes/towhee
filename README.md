@@ -12,7 +12,51 @@ Your app keeps its users. Its backend signs a short-lived token for each room, a
 
 **Try it:** [towhee.madebytobi.com/demo](https://towhee.madebytobi.com/demo) is a shared board. Open it in two windows. Docs are at [towhee.madebytobi.com/docs](https://towhee.madebytobi.com/docs).
 
-> **Status:** early. The plan is in [docs/PLAN.md](docs/PLAN.md) and the build order in [docs/SESSIONS.md](docs/SESSIONS.md). Nothing is published yet.
+> **Status:** v0.1, the first release. Pin versions. The plan is in [docs/PLAN.md](docs/PLAN.md) and the build order in [docs/SESSIONS.md](docs/SESSIONS.md).
+
+## Quick start
+
+**1. Run a server**, with Docker:
+
+```bash
+export TOWHEE_SECRET="$(node -e "console.log(crypto.randomBytes(32).toString('base64url'))")"
+docker run -p 8080:8080 -e TOWHEE_SECRET -v towhee-data:/data ghcr.io/tobibytes/towhee:0.1.0
+```
+
+or on Cloudflare: copy [`packages/cloudflare/template`](packages/cloudflare/template), then `npm install`, `npx wrangler secret put TOWHEE_SECRET` and `npx wrangler deploy`.
+
+**2. Sign tokens in your backend** (`npm i @towhee/auth @towhee/protocol`), after your own session check:
+
+```ts
+import { createInboxToken, createRoomToken } from "@towhee/auth";
+import { INBOX_ROOM } from "@towhee/protocol";
+
+export async function POST(request: Request) {
+  const user = await getSessionUser(request); // your auth
+  if (!user) return new Response("Sign in", { status: 401 });
+  const { room } = await request.json();
+  const key = { id: "default", secret: process.env.TOWHEE_SECRET! };
+  const token =
+    room === INBOX_ROOM
+      ? await createInboxToken({ userId: user.id }, key)
+      : await createRoomToken({ userId: user.id, room, access: "write", user: { name: user.name } }, key);
+  return Response.json({ token });
+}
+```
+
+**3. Share a document** in the browser (`npm i @towhee/client`):
+
+```ts
+import { createClient } from "@towhee/client";
+
+const client = createClient({ url: "ws://localhost:8080", authEndpoint: "/api/towhee-token" });
+const room = client.enter("doc:42");
+const text = room.doc.getText("body");
+text.observe(() => console.log(text.toString()));
+text.insert(0, "Hello from this tab. ");
+```
+
+Open it in two tabs: each sees the other's text. From here, bind an editor to `room.doc` (TipTap, BlockNote, CodeMirror), and add presence, comments, history and the inbox; React apps can use `@towhee/react`, and [Junco](https://junco.madebytobi.com/docs/collaboration/)'s `@junco/collab` draws the UI.
 
 ## Packages
 

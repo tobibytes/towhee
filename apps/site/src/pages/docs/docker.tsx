@@ -11,12 +11,14 @@ export function Docker() {
 
       <H2 id="docker">Docker</H2>
       <Code
-        code={`git clone ${GITHUB}.git && cd towhee
-docker build -t towhee .
-docker run -d --name towhee -p 8080:8080 \\
+        code={`docker run -d --name towhee -p 8080:8080 \\
   -e TOWHEE_SECRET="<32+ random characters>" \\
-  -v towhee-data:/data --restart unless-stopped towhee`}
+  -v towhee-data:/data --restart unless-stopped ghcr.io/tobibytes/towhee:0.1.0`}
       />
+      <P>
+        Images are on GitHub Container Registry for amd64 and arm64, tagged with each release and <C>latest</C>. To build one yourself:{" "}
+        <C>git clone {GITHUB}.git &amp;&amp; cd towhee &amp;&amp; docker build -t towhee .</C>
+      </P>
       <P>
         Or use <A href={`${GITHUB}/blob/main/examples/docker/compose.yaml`}>examples/docker/compose.yaml</A>. The image runs as the{" "}
         <C>node</C> user, stores <C>/data/towhee.sqlite</C> on the volume and has a health check. <C>docker stop</C> saves every room before

@@ -1,9 +1,19 @@
 {
   "name": "@towhee/protocol",
   "version": "0.0.0",
-  "private": true,
   "description": "Towhee's wire protocol: message framing, access levels, error codes and room ids, shared by clients and servers.",
   "license": "MIT",
+  "author": "Oluwatobi Olajide",
+  "homepage": "https://towhee.madebytobi.com",
+  "bugs": {
+    "url": "https://github.com/tobibytes/towhee/issues"
+  },
+  "keywords": [
+    "realtime",
+    "collaboration",
+    "protocol",
+    "yjs"
+  ],
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -12,7 +22,9 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
@@ -22,5 +34,8 @@
     "type": "git",
     "url": "git+https://github.com/tobibytes/towhee.git",
     "directory": "packages/protocol"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

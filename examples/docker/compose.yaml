@@ -3,9 +3,7 @@
 # Apps connect to ws://localhost:8080 and sign tokens with the same secret (key id "default").
 services:
   towhee:
-    build:
-      context: ../..
-    image: towhee
+    image: ghcr.io/tobibytes/towhee:0.1.0 # or build it: replace with `build: { context: ../.. }`
     ports:
       - "8080:8080"
     environment:

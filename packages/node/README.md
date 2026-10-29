@@ -5,11 +5,12 @@ Run Towhee on Node 22.18 or newer: a WebSocket server with SQLite storage. Rooms
 ## Docker
 
 ```bash
-docker build -t towhee .            # from the repo root
 docker run -p 8080:8080 \
   -e TOWHEE_SECRET="$(node -e "console.log(crypto.randomBytes(32).toString('base64url'))")" \
-  -v towhee-data:/data towhee
+  -v towhee-data:/data ghcr.io/tobibytes/towhee:latest
 ```
+
+Pin a version (`ghcr.io/tobibytes/towhee:0.1.0`) in production. To build it yourself: `docker build -t towhee .` from the repo root.
 
 Or `examples/docker/compose.yaml`. The image runs as the `node` user, keeps its SQLite file in `/data`, has a health check, and on `docker stop` saves every room before exiting.
 

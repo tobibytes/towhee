@@ -1,9 +1,21 @@
 {
   "name": "@towhee/client",
   "version": "0.0.0",
-  "private": true,
   "description": "Connect to a Towhee room from the browser or Node: a synced Y.Doc, presence, reconnects and token refresh.",
   "license": "MIT",
+  "author": "Oluwatobi Olajide",
+  "homepage": "https://towhee.madebytobi.com",
+  "bugs": {
+    "url": "https://github.com/tobibytes/towhee/issues"
+  },
+  "keywords": [
+    "realtime",
+    "collaboration",
+    "yjs",
+    "websocket",
+    "presence",
+    "multiplayer"
+  ],
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -12,7 +24,9 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
@@ -32,5 +46,8 @@
     "type": "git",
     "url": "git+https://github.com/tobibytes/towhee.git",
     "directory": "packages/client"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
