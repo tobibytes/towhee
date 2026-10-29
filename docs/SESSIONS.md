@@ -103,10 +103,10 @@ A session is done when its "Done when" list is true, CI is green and the PR is m
 
 ## 10. Junco UI (in the Junco repo)
 
-- [ ] `@junco/collab`: adapter interface and a fake-data adapter
-- [ ] UI from Junco components: avatar stack, live cursors, who's-editing bar, comment threads and sidebar, history sidebar, inbox, connection status
-- [ ] Towhee adapter on `@towhee/client`
-- [ ] Docs pages, tests and registry items, following Junco's rules
+- [x] `@junco/collab`: adapter interface and a fake-data adapter (junco#47)
+- [x] UI from Junco components: avatar stack, live cursors, who's-editing bar, comment threads and sidebar, history sidebar, inbox, connection status
+- [x] Towhee adapter on `@towhee/client` (`towheeAdapter`, typed by shape; checked against real clients and core rooms)
+- [x] Docs pages and tests. Installed package only for now, like `@junco/motion`; registry copy-in items later
 
 **Done when:** every collab component works on fake data in the Junco docs, and the same components work against a local Towhee server.
 
@@ -119,9 +119,9 @@ A session is done when its "Done when" list is true, CI is green and the PR is m
 
 ## 12. Release v0.1
 
-- [ ] Remove `"private": true` from each package and add changesets (packages stay private until now, so merges don't try to publish)
-- [ ] `@towhee` npm org and trusted publishers (Tobi), first publish
-- [ ] README and docs: quick start, self-hosting on Cloudflare and with Docker, tokens and access, API reference
-- [ ] Docker image published to GitHub Container Registry
+- [x] Remove `"private": true` from each package and add changesets (packages stay private until now, so merges don't try to publish)
+- [ ] `@towhee` npm org and trusted publishers (Tobi), first publish. Steps in `docs/RELEASING.md`
+- [x] README and docs: quick start, self-hosting on Cloudflare and with Docker, tokens and access, API reference
+- [x] Docker image to GitHub Container Registry: the Release workflow pushes it with each `@towhee/node` release; the "Docker image" workflow pushes the first one
 
 **Done when:** a new project can follow the README from zero to a working shared document on both hosts.

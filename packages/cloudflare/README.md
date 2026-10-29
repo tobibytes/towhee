@@ -19,8 +19,6 @@ import { createRoomToken } from "@towhee/auth";
 const token = await createRoomToken({ userId, room, access: "write" }, { id: "default", secret: process.env.TOWHEE_SECRET });
 ```
 
-> Until Towhee's first release (`@towhee/cloudflare` 0.1.0) the template's dependency won't install from npm.
-
 ## Settings
 
 | Name | Kind | |

@@ -8,10 +8,9 @@ export function Overview() {
       <H1 lead="Towhee is a realtime collaboration server you run yourself: live presence, shared documents that sync and work offline, comments, version history and notifications. Your app keeps its users and signs a token for each room.">
         Towhee
       </H1>
-      <Note title="Pre-release">
-        Towhee works end to end (this site and its demo run on it) but its packages aren&apos;t on npm yet; they publish with v0.1.
-        Until then, use the <A href={GITHUB}>repo</A>: clone it, <C>pnpm install</C>, <C>pnpm build</C>, and depend on the
-        packages from the workspace or a <C>pnpm pack</C> tarball.
+      <Note title="v0.1">
+        The first release: packages on npm (<C>@towhee/*</C>) and the server image at <C>ghcr.io/tobibytes/towhee</C>. It&apos;s
+        early, so pin versions and read the changelog on the <A href={`${GITHUB}/releases`}>releases page</A> before upgrading.
       </Note>
 
       <H2 id="what">What you can build</H2>
@@ -40,10 +39,8 @@ export function Overview() {
       <H2 id="quick-start">Quick start</H2>
       <P>1. Run a server. Locally with Docker (or see <A href="/docs/cloudflare">Cloudflare</A>):</P>
       <Code
-        code={`git clone ${GITHUB}.git && cd towhee
-docker build -t towhee .
-export TOWHEE_SECRET="$(node -e "console.log(crypto.randomBytes(32).toString('base64url'))")"
-docker run -p 8080:8080 -e TOWHEE_SECRET -v towhee-data:/data towhee`}
+        code={`export TOWHEE_SECRET="$(node -e "console.log(crypto.randomBytes(32).toString('base64url'))")"
+docker run -p 8080:8080 -e TOWHEE_SECRET -v towhee-data:/data ghcr.io/tobibytes/towhee:0.1.0`}
       />
       <P>2. Add a token endpoint to your backend. It decides who may open which room:</P>
       <Code

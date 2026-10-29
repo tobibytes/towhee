@@ -1,9 +1,22 @@
 {
   "name": "@towhee/node",
   "version": "0.0.0",
-  "private": true,
   "description": "Run Towhee on Node: a WebSocket server with SQLite storage. Also published as the towhee Docker image.",
   "license": "MIT",
+  "author": "Oluwatobi Olajide",
+  "homepage": "https://towhee.madebytobi.com",
+  "bugs": {
+    "url": "https://github.com/tobibytes/towhee/issues"
+  },
+  "keywords": [
+    "realtime",
+    "collaboration",
+    "yjs",
+    "websocket",
+    "server",
+    "sqlite",
+    "docker"
+  ],
   "type": "module",
   "sideEffects": false,
   "bin": {
@@ -15,7 +28,9 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "engines": {
     "node": ">=22.18"
   },
@@ -39,5 +54,8 @@
     "type": "git",
     "url": "git+https://github.com/tobibytes/towhee.git",
     "directory": "packages/node"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

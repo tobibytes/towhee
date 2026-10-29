@@ -16,6 +16,7 @@ permissions:
   contents: write
   pull-requests: write
   id-token: write # npm Trusted Publishing (OIDC) + provenance
+  packages: write # the Docker image on GitHub Container Registry
 
 jobs:
   release:
@@ -32,6 +33,7 @@ jobs:
       - run: pnpm build
       - run: pnpm test
       - name: Version PR or publish
+        id: changesets
         uses: changesets/action@v1
         with:
           version: pnpm version-packages
@@ -41,3 +43,39 @@ jobs:
           createGithubReleases: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Published @towhee/node version
+        id: node
+        if: steps.changesets.outputs.published == 'true'
+        env:
+          PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
+        run: echo "version=$(node -e 'const p=JSON.parse(process.env.PUBLISHED).find(p=>p.name==="@towhee/node");process.stdout.write(p?p.version:"")')" >> "$GITHUB_OUTPUT"
+    outputs:
+      node-version: ${{ steps.node.outputs.version }}
+
+  # When @towhee/node publishes, the same version goes out as ghcr.io/tobibytes/towhee (amd64 and arm64).
+  docker:
+    needs: release
+    if: needs.release.outputs.node-version != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/tobibytes/towhee:${{ needs.release.outputs.node-version }}
+            ghcr.io/tobibytes/towhee:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/tobibytes/towhee
+            org.opencontainers.image.version=${{ needs.release.outputs.node-version }}
+            org.opencontainers.image.licenses=MIT

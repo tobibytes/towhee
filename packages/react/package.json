@@ -1,9 +1,21 @@
 {
   "name": "@towhee/react",
   "version": "0.0.0",
-  "private": true,
   "description": "React hooks for Towhee: rooms, presence, status, threads, history and the inbox.",
   "license": "MIT",
+  "author": "Oluwatobi Olajide",
+  "homepage": "https://towhee.madebytobi.com",
+  "bugs": {
+    "url": "https://github.com/tobibytes/towhee/issues"
+  },
+  "keywords": [
+    "realtime",
+    "collaboration",
+    "react",
+    "hooks",
+    "presence",
+    "multiplayer"
+  ],
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -42,5 +54,8 @@
     "type": "git",
     "url": "git+https://github.com/tobibytes/towhee.git",
     "directory": "packages/react"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
