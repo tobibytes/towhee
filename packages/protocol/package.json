@@ -1,6 +1,6 @@
 {
   "name": "@towhee/protocol",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Towhee's wire protocol and shared types: message framing, access levels, comment bodies, versions, notifications and error codes.",
   "license": "MIT",
   "author": "Oluwatobi Olajide",

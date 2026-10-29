@@ -1,5 +1,13 @@
 # @towhee/auth
 
+## 0.1.1
+
+### Patch Changes
+
+- 24566ff: New logo and README on npm, clearer package descriptions.
+- Updated dependencies [24566ff]
+  - @towhee/protocol@0.1.1
+
 ## 0.1.0
 
 ### Minor Changes
