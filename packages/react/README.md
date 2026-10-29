@@ -1,3 +1,5 @@
+<p><a href="https://towhee.madebytobi.com"><img src="https://raw.githubusercontent.com/tobibytes/towhee/main/apps/site/public/brand/mark.svg" width="48" height="48" alt="Towhee"></a></p>
+
 # @towhee/react
 
 React hooks for [Towhee](https://towhee.madebytobi.com): rooms, presence, status, threads, history and the inbox.
@@ -32,3 +34,7 @@ Hooks: `useRoom`, `useStatus`, `useSynced`, `useDoc`, `useSelf`, `useOthers`, `u
 - **No Suspense:** check `ready` on `useThreads`, `useHistory` and `useInbox`.
 
 Docs: [towhee.madebytobi.com/docs/react](https://towhee.madebytobi.com/docs/react).
+
+---
+
+Part of [Towhee](https://github.com/tobibytes/towhee), realtime collaboration you host yourself. [Docs](https://towhee.madebytobi.com/docs) · [Live demo](https://towhee.madebytobi.com/demo) · MIT

@@ -1,3 +1,5 @@
+<p><a href="https://towhee.madebytobi.com"><img src="https://raw.githubusercontent.com/tobibytes/towhee/main/apps/site/public/brand/mark.svg" width="48" height="48" alt="Towhee"></a></p>
+
 # @towhee/cloudflare
 
 Run Towhee on Cloudflare: a Worker routes `/v1/rooms/<room>` to one Durable Object per room. Rooms use WebSocket hibernation, so an idle room costs nothing while its sockets stay open, and keep their documents in Durable Object SQLite.
@@ -41,3 +43,7 @@ const token = await createRoomToken({ userId, room, access: "write" }, { id: "de
 - Each connection's state (user, access, expiry, presence ownership) is stored in SQLite and its id in the socket's attachment. When a hibernated room wakes, it rebuilds its connections from them and asks clients to resend their presence.
 - The compacted document is stored in 1 MB chunks (Durable Object SQLite rows are capped at 2 MB).
 - Each user's inbox is its own Durable Object (`TowheeInbox`, at `/v1/inbox/<user>`). Rooms hand it notifications over RPC; it stores them, shows them live and sends the webhook.
+
+---
+
+Part of [Towhee](https://github.com/tobibytes/towhee), realtime collaboration you host yourself. [Docs](https://towhee.madebytobi.com/docs) · [Live demo](https://towhee.madebytobi.com/demo) · MIT

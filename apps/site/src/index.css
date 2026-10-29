@@ -4,3 +4,16 @@
 /* Tailwind needs to see the classes Junco's components and blocks use. */
 @source "../node_modules/@junco/react/dist";
 @source "../node_modules/@junco/blocks/dist";
+
+/* Towhee's accent: the bird's rufous flank. Text on it, and it on the page, stay above 4.5:1 in both modes. */
+:root {
+  --primary: oklch(0.53 0.17 42);
+  --primary-foreground: oklch(0.99 0 0);
+  --ring: oklch(0.53 0.17 42);
+}
+.dark,
+[data-theme="dark"] {
+  --primary: oklch(0.76 0.15 58);
+  --primary-foreground: oklch(0.18 0.02 50);
+  --ring: oklch(0.76 0.15 58);
+}

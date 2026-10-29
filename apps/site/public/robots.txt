@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+Disallow: /demo/
+Sitemap: https://towhee.madebytobi.com/sitemap.xml

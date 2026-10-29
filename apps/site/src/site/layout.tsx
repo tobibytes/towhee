@@ -1,5 +1,5 @@
 import { Outlet, ScrollRestoration, useLocation } from "react-router";
-import { BrandMark, LinkProvider, SiteFooter, SiteHeader } from "@junco/blocks/marketing";
+import { LinkProvider, SiteFooter, SiteHeader } from "@junco/blocks/marketing";
 import { RouterLink, useInternalLinks } from "./links";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -9,7 +9,7 @@ export const JUNCO = "https://junco.madebytobi.com";
 export const JUNCO_COLLAB = `${JUNCO}/docs/collaboration/`;
 export const JUNCO_EXAMPLE = `${JUNCO}/examples/towhee-board/`;
 
-const brand = { name: "Towhee", href: "/", logo: <BrandMark className="size-6 text-primary" /> };
+const brand = { name: "Towhee", href: "/", logo: <img src="/brand/mark.svg" alt="" width={28} height={28} className="size-7 rounded-control" /> };
 const links = [
   { label: "Docs", href: "/docs" },
   { label: "Examples", href: "/examples" },
@@ -49,7 +49,7 @@ export function Footer() {
   return (
     <SiteFooter
       brand={brand}
-      tagline="Realtime collaboration you host yourself. MIT."
+      tagline="Realtime collaboration you host yourself. Open source, on Cloudflare or Docker."
       columns={[
         {
           title: "Towhee",
@@ -57,6 +57,7 @@ export function Footer() {
             { label: "Docs", href: "/docs" },
             { label: "Examples", href: "/examples" },
             { label: "Live demo", href: "/demo" },
+            { label: "React", href: "/docs/react" },
           ],
         },
         {
@@ -68,19 +69,27 @@ export function Footer() {
           ],
         },
         {
-          title: "More",
+          title: "Project",
           links: [
             { label: "GitHub", href: GITHUB },
-            { label: "Junco design system", href: JUNCO },
-            { label: "Collaboration UI (@junco/collab)", href: JUNCO_COLLAB },
-            { label: "Towhee Board on Junco", href: JUNCO_EXAMPLE },
+            { label: "Releases", href: `${GITHUB}/releases` },
             { label: "npm", href: "https://www.npmjs.com/org/towhee" },
+            { label: "Docker image", href: `${GITHUB}/pkgs/container/towhee` },
+          ],
+        },
+        {
+          title: "Junco",
+          links: [
+            { label: "Design system", href: JUNCO },
+            { label: "UI kit (@junco/collab)", href: JUNCO_COLLAB },
+            { label: "Towhee Board on Junco", href: JUNCO_EXAMPLE },
           ],
         },
       ]}
       legal={
         <>
-          Built with <a className="underline underline-offset-4" href={JUNCO}>Junco</a>.
+          © {new Date().getFullYear()} Oluwatobi Olajide. MIT licensed. Built with{" "}
+          <a className="underline underline-offset-4" href={JUNCO}>Junco</a>.
         </>
       }
       status={{ label: "Server status", href: "/health", state: "ok" }}

@@ -1,7 +1,7 @@
 {
   "name": "@towhee/cloudflare",
   "version": "0.1.0",
-  "description": "Run Towhee on Cloudflare: a Worker plus one Durable Object per room, with WebSocket hibernation and SQLite storage.",
+  "description": "Run the Towhee server on Cloudflare: a Worker plus Durable Objects per room and inbox, with WebSocket hibernation and SQLite.",
   "license": "MIT",
   "author": "Oluwatobi Olajide",
   "homepage": "https://towhee.madebytobi.com",
