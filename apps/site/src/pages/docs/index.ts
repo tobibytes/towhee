@@ -4,5 +4,6 @@ export { Docker } from "./docker";
 export { DocsLayout } from "./layout";
 export { Managing } from "./managing";
 export { Overview } from "./overview";
+export { ReactGuide } from "./react";
 export { Reference } from "./reference";
 export { Tokens } from "./tokens";

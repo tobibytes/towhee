@@ -10,6 +10,7 @@ export const DOCS_NAV = [
     items: [
       { href: "/docs", label: "Overview and quick start" },
       { href: "/docs/client", label: "Using the client" },
+      { href: "/docs/react", label: "React" },
       { href: "/docs/tokens", label: "Tokens and access" },
     ],
   },

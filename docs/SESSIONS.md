@@ -96,8 +96,8 @@ A session is done when its "Done when" list is true, CI is green and the PR is m
 
 ## 9. React
 
-- [ ] `@towhee/react`: `TowheeProvider`, `RoomProvider`, `useRoom`, `useStatus`, `useSelf`, `useOthers`, `useUpdatePresence`, `useThreads`, `useHistory`, `useInbox`
-- [ ] Suspense-free by default, safe with React 19 strict mode and server rendering
+- [x] `@towhee/react`: `TowheeProvider`, `RoomProvider`, `useRoom`, `useStatus`, `useSelf`, `useOthers`, `useUpdatePresence`, `useThreads`, `useHistory`, `useInbox`
+- [x] Suspense-free by default, safe with React 19 strict mode and server rendering
 
 **Done when:** hooks are tested with Testing Library against an in-process server, including strict-mode double mounts.
 
