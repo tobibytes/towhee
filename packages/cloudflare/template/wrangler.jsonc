@@ -10,13 +10,15 @@
   "durable_objects": {
     "bindings": [
       { "name": "TOWHEE_ROOMS", "class_name": "TowheeRoom" },
-      { "name": "TOWHEE_INBOXES", "class_name": "TowheeInbox" }
+      { "name": "TOWHEE_INBOXES", "class_name": "TowheeInbox" },
+      { "name": "TOWHEE_DIRECTORY", "class_name": "TowheeDirectory" }
     ]
   },
   // new_sqlite_classes: rooms and inboxes keep their data in Durable Object SQLite.
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["TowheeRoom"] },
-    { "tag": "v2", "new_sqlite_classes": ["TowheeInbox"] }
+    { "tag": "v2", "new_sqlite_classes": ["TowheeInbox"] },
+    { "tag": "v3", "new_sqlite_classes": ["TowheeDirectory"] }
   ],
   "vars": {
     // Optional: POST each notification to your app (also `wrangler secret put TOWHEE_WEBHOOK_SECRET`).

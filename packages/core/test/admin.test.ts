@@ -37,6 +37,17 @@ describe("admin API", () => {
     expect(o.kick).toHaveBeenCalledWith("doc:1", "bob");
   });
 
+  it("lists rooms a page at a time, and says when a host can't", async () => {
+    const all = ["a:1", "a:2", "b:1"];
+    const o = ops({ list: vi.fn(async ({ prefix, after, limit }) => all.filter((r) => r.startsWith(prefix) && r > after).slice(0, limit)) });
+    expect(await (await call("/v1/admin/rooms?limit=2", {}, o)).json()).toEqual({ rooms: ["a:1", "a:2"], cursor: "a:2" });
+    expect(await (await call("/v1/admin/rooms?limit=2&cursor=a:2", {}, o)).json()).toEqual({ rooms: ["b:1"] });
+    expect(await (await call("/v1/admin/rooms?prefix=a:", {}, o)).json()).toEqual({ rooms: ["a:1", "a:2"] });
+    expect((await call("/v1/admin/rooms?limit=0", {}, o)).status).toBe(400);
+    expect((await call("/v1/admin/rooms", {}, ops())).status).toBe(501);
+    expect((await call("/v1/admin/rooms", { auth: null }, o)).status).toBe(401);
+  });
+
   it("404s missing rooms and refuses bad input", async () => {
     expect((await call("/v1/admin/rooms/doc:2")).status).toBe(404);
     expect((await call("/v1/admin/rooms/doc:2/export")).status).toBe(404);

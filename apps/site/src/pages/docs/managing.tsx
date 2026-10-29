@@ -121,6 +121,7 @@ export async function POST(request) {
       <Code
         title="Look, export, remove someone, delete"
         code={`A="Authorization: Bearer $TOWHEE_ADMIN_SECRET"
+curl -H "$A" "https://towhee.example.com/v1/admin/rooms?prefix=doc:"   # room ids, 100 a page (cursor=, limit=)
 curl -H "$A" https://towhee.example.com/v1/admin/rooms/doc:42          # who's here, sizes, counts
 curl -H "$A" https://towhee.example.com/v1/admin/rooms/doc:42/export   # document (base64 Yjs), threads, versions
 curl -H "$A" -X POST -d '{"userId":"u_123"}' https://towhee.example.com/v1/admin/rooms/doc:42/kick
@@ -139,7 +140,10 @@ curl -H "$A" -X DELETE https://towhee.example.com/v1/admin/rooms/doc:42`}
           <>
             The export&apos;s <C>document</C> is one Yjs update: <C>Y.applyUpdate(new Y.Doc(), base64Decode(document))</C> rebuilds it.
           </>,
-          <>Listing every room isn&apos;t there yet: Cloudflare can&apos;t enumerate Durable Objects without an index of its own.</>,
+          <>
+            The room list comes from storage on Node. On Cloudflare it needs the <C>TOWHEE_DIRECTORY</C> binding (a small index rooms add
+            themselves to; rooms from before you add it join on their next visit).
+          </>,
         ]}
       />
     </>

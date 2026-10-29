@@ -3,6 +3,8 @@ import type { RoomExport, RoomInfo } from "./room";
 
 /** What a host does for the admin API. Each returns null (or false, 0) for a room that doesn't exist. */
 export interface AdminOps {
+  /** Room ids in order after `after`, starting with `prefix`; undefined when the host can't list rooms. */
+  list?(options: { prefix: string; after: string; limit: number }): Promise<string[]>;
   info(room: string): Promise<RoomInfo | null>;
   export(room: string): Promise<RoomExport | null>;
   /** Disconnects everyone with `room_deleted` and deletes all the room's data. */
@@ -13,6 +15,7 @@ export interface AdminOps {
 
 export const MIN_ADMIN_SECRET_LENGTH = 32;
 const ADMIN_PATH = /^\/v1\/admin\/rooms\/([^/]+)(\/export|\/kick)?$/;
+const MAX_LIST = 1000;
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
@@ -41,6 +44,7 @@ export function isAdminPath(pathname: string): boolean {
  * The admin API, for any host. Requests need `Authorization: Bearer <secret>`; without a secret
  * configured the API doesn't exist (404).
  *
+ * - `GET /v1/admin/rooms?prefix=&cursor=&limit=`: room ids, in order, 100 at a time (at most 1000)
  * - `GET /v1/admin/rooms/<room>`: connections, users, document size, thread and version counts
  * - `GET /v1/admin/rooms/<room>/export`: the document (base64 Yjs update), threads and versions
  * - `DELETE /v1/admin/rooms/<room>`: disconnects everyone and deletes the room's data
@@ -54,7 +58,20 @@ export async function handleAdmin(request: Request, secret: string | undefined, 
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { "content-type": "application/json", "www-authenticate": "Bearer" } });
   }
 
-  const match = ADMIN_PATH.exec(new URL(request.url).pathname);
+  const url = new URL(request.url);
+  if (url.pathname === "/v1/admin/rooms" || url.pathname === "/v1/admin/rooms/") {
+    if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+    if (!ops.list) return json({ error: "This host can't list rooms" }, 501);
+    const limit = Number(url.searchParams.get("limit") ?? 100);
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIST) return json({ error: `limit must be 1 to ${MAX_LIST}` }, 400);
+    const prefix = url.searchParams.get("prefix") ?? "";
+    const after = url.searchParams.get("cursor") ?? "";
+    // One extra tells whether there's another page.
+    const rooms = await ops.list({ prefix, after, limit: limit + 1 });
+    const page = rooms.slice(0, limit);
+    return json({ rooms: page, ...(rooms.length > limit ? { cursor: page[page.length - 1] } : {}) });
+  }
+  const match = ADMIN_PATH.exec(url.pathname);
   if (!match) return json({ error: "Not found" }, 404);
   let room: string;
   try {

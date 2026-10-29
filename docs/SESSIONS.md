@@ -122,7 +122,7 @@ A session is done when its "Done when" list is true, CI is green and the PR is m
 - [x] `TOWHEE_ADMIN_SECRET` turns on `/v1/admin` on both hosts: room info, export, kick a user, delete a room
 - [x] Close codes `room_deleted` and `removed`, which stop clients instead of reconnecting
 - [x] `Storage.deleteRoom`, covered by the shared storage suite
-- [ ] Listing rooms (needs an index on Cloudflare)
+- [x] Listing rooms: from storage on Node, a `TowheeDirectory` index on Cloudflare
 
 ## 12. Release v0.1
 

@@ -1,7 +1,7 @@
 import { handleRequest } from "@towhee/cloudflare";
 import { type DemoEnv, demoToken } from "./demo";
 
-export { TowheeInbox, TowheeRoom } from "@towhee/cloudflare";
+export { TowheeDirectory, TowheeInbox, TowheeRoom } from "@towhee/cloudflare";
 
 /**
  * towhee.madebytobi.com: the website (static assets, served before this code runs), the Towhee
