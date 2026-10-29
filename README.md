@@ -24,7 +24,7 @@ Your app keeps its users. Its backend signs a short-lived token for each room, a
 | `@towhee/node` | Node WebSocket server with SQLite, also shipped as a Docker image |
 | `@towhee/cloudflare` | Worker + Durable Objects |
 | `@towhee/client` | Browser and Node client |
-| `@towhee/react` | React hooks |
+| `@towhee/react` | React hooks: providers, presence, status, threads, history, inbox |
 | `apps/site` | towhee.madebytobi.com: landing page, docs, examples and the live demo (private, built with Junco) |
 
 UI components for all of this live in [Junco](https://github.com/tobibytes/junco) (`@junco/collab`).

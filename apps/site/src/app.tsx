@@ -21,6 +21,7 @@ export const router = createBrowserRouter([
         children: [
           { index: true, lazy: { Component: () => docs().then((m) => m.Overview) } },
           { path: "client", lazy: { Component: () => docs().then((m) => m.ClientGuide) } },
+          { path: "react", lazy: { Component: () => docs().then((m) => m.ReactGuide) } },
           { path: "tokens", lazy: { Component: () => docs().then((m) => m.Tokens) } },
           { path: "cloudflare", lazy: { Component: () => docs().then((m) => m.Cloudflare) } },
           { path: "docker", lazy: { Component: () => docs().then((m) => m.Docker) } },
