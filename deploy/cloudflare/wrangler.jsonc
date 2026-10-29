@@ -1,0 +1,22 @@
+// Tobi's Towhee deployment at https://towhee.madebytobi.com (wss://towhee.madebytobi.com).
+// Deploy from the repo root:  pnpm build && pnpm --filter @towhee/deploy-cloudflare deploy
+// Secrets (already set; only for a new account): npx wrangler secret put TOWHEE_SECRET
+{
+  "name": "towhee",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "durable_objects": {
+    "bindings": [
+      { "name": "TOWHEE_ROOMS", "class_name": "TowheeRoom" },
+      { "name": "TOWHEE_INBOXES", "class_name": "TowheeInbox" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["TowheeRoom"] },
+    { "tag": "v2", "new_sqlite_classes": ["TowheeInbox"] }
+  ],
+  // Cloudflare creates the DNS record and certificate for the custom domain.
+  "routes": [{ "pattern": "towhee.madebytobi.com", "custom_domain": true }],
+  "workers_dev": false,
+  "observability": { "enabled": true }
+}
