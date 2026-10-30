@@ -88,7 +88,11 @@ export function Footer() {
       ]}
       legal={
         <>
-          © {new Date().getFullYear()} Oluwatobi Olajide. MIT licensed. Built with{" "}
+          © {new Date().getFullYear()}{" "}
+          <a className="underline underline-offset-4" href="https://madebytobi.com">
+            Tobibytes
+          </a>
+          . MIT licensed. Built with{" "}
           <a className="underline underline-offset-4" href={JUNCO}>Junco</a>.
         </>
       }
